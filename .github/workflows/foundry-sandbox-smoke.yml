@@ -115,16 +115,19 @@ jobs:
           assert report["launch_authorized"] is False
           print("EXPECTED_NEGATIVE_CONTROLS: network, UID, memory detected")
           PY
-      - name: Preserve positive and negative sandbox evidence for review
+      - name: Preserve evidence in immutable CI log while Actions artifact quota is exhausted
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: opdb-sandbox-evidence-${{ github.sha }}
-          path: |
-            fixed-sandbox-evidence.json
-            sandbox-negative-evidence.json
-          if-no-files-found: warn
-          retention-days: 30
+        shell: bash
+        run: |
+          for evidence in fixed-sandbox-evidence.json sandbox-negative-evidence.json; do
+            if [ -s "$evidence" ]; then
+              echo "=== $evidence / source SHA $GITHUB_SHA ==="
+              cat "$evidence"
+            else
+              echo "MISSING_EVIDENCE: $evidence"
+            fi
+          done
+          # This reporting step never overrides the outcome of failed preceding checks.
       - name: Confirm source checkout remains unmodified
         run: git diff --exit-code
       - name: Declare exact evidence boundary
