@@ -1,0 +1,51 @@
+name: OpDB weekly cross-runtime research
+on:
+  schedule:
+    - cron: '49 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opdb-research-compatibility
+  cancel-in-progress: false
+
+jobs:
+  cross-runtime:
+    if: github.repository == 'mel2003ru-code/OpDB'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.11'
+          - os: ubuntu-latest
+            python: '3.13'
+          - os: windows-latest
+            python: '3.13'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: All offline tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Reproduce four fixed independent seeds
+        shell: bash
+        run: |
+          mkdir -p research-results
+          for seed in 20261108 20261109 20261110 20261111; do
+            python -m research.cycle --seed "$seed" --output "research-results/seed-${seed}.json"
+            echo "====== complete machine record for seed ${seed} ======"
+            cat "research-results/seed-${seed}.json"
+          done
+      - name: Explain evidence retention
+        if: always()
+        run: echo "Results are in this run's logs and job summary. GitHub artifact storage quota is currently exhausted."
