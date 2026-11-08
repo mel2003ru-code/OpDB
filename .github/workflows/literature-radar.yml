@@ -1,0 +1,41 @@
+name: OpDB weekly research literature radar
+on:
+  schedule:
+    - cron: '17 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opdb-research-literature
+  cancel-in-progress: false
+
+jobs:
+  bibliography:
+    if: github.repository == 'mel2003ru-code/OpDB'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline metadata parser tests
+        run: python -m unittest discover -s tests -p 'test_literature_radar.py' -v
+      - name: Fetch recent DOI candidates from Crossref
+        run: python -m research.literature --days 120 --json literature-radar.json --markdown literature-radar.md
+      - name: Retain full results in logs and summary
+        if: always()
+        shell: bash
+        run: |
+          if test -s literature-radar.md; then cat literature-radar.md >> "$GITHUB_STEP_SUMMARY"; fi
+          if test -s literature-radar.json; then
+            echo "=== machine-readable Crossref metadata ==="
+            cat literature-radar.json
+          else
+            echo "No Crossref results available"
+          fi
