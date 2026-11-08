@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-001",
+  "workstream": "Safety",
+  "date_utc": "2026-11-08T00:00:00Z",
+  "status": "NOT VERIFIED",
+  "summary": "Replace with a concise, independently checkable result.",
+  "commit_sha": "",
+  "artifacts": [],
+  "tested_environment": "",
+  "reproduce_commands": [],
+  "tests_passed": [],
+  "tests_failed": [],
+  "open_risks": [],
+  "contract_changes": [],
+  "requires_headquarters_decision": []
+}
