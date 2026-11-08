@@ -92,7 +92,7 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
     # already be local and independently verified by a future runtime.
     argv = [
         "docker", "run", "--rm", "--pull=never",
-        "--network=none", "--read-only",
+        "--network=none", "--read-only", "--log-driver=none",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--pids-limit=32", "--memory=128m", "--memory-swap=128m",
         "--cpus=0.5", "--user=65534:65534", "--shm-size=8m",
