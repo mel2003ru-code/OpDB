@@ -43,9 +43,28 @@ def validate(path):
     sha = doc.get("commit_sha")
     if isinstance(sha, str) and sha and not re.fullmatch(r"[a-fA-F0-9]{40}",sha):
         errors.append("commit_sha must be a 40-hex-character commit identifier or blank")
+    for name in (
+        "artifacts", "reproduce_commands", "tests_passed",
+        "tests_failed", "open_risks", "contract_changes",
+        "requires_headquarters_decision",
+    ):
+        items = doc.get(name)
+        if isinstance(items, list) and any(
+            not isinstance(item, str) or not item.strip() for item in items
+        ):
+            errors.append(f"{name}: entries must be nonempty strings")
     if doc.get("status") == "PASS":
-        if not doc.get("tested_environment") or not doc.get("reproduce_commands"):
-            errors.append("PASS requires environment and reproduction commands")
+        environment = doc.get("tested_environment")
+        if not isinstance(environment, str) or not environment.strip():
+            errors.append("PASS requires nonempty tested_environment")
+        if not doc.get("reproduce_commands"):
+            errors.append("PASS requires reproduction commands")
+        if not doc.get("tests_passed"):
+            errors.append("PASS requires at least one passed test")
+        if not doc.get("artifacts"):
+            errors.append("PASS requires traceable artifacts")
+        if not doc.get("commit_sha"):
+            errors.append("PASS requires exact commit_sha")
         if doc.get("tests_failed"):
             errors.append("PASS cannot list failing tests")
     return errors
