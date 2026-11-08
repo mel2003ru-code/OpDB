@@ -15,8 +15,13 @@ permissions:
 
 jobs:
   fixed-runtime-probe:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 8
+    env:
+      # Reviewed PR image lock: observed in fixed probe run #42482546241.
+      # Image digest pin is reproducibility, NOT independent publisher attestation.
+      OPDB_TEST_IMAGE: python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535
     steps:
       - name: Checkout candidate code without stored GitHub credentials
         uses: actions/checkout@v4
@@ -33,30 +38,11 @@ jobs:
         run: |
           docker version --format '{{.Server.Version}}'
           docker info --format '{{.OSType}}/{{.Architecture}}'
-      - name: Fetch research image (resolved digest is NOT prior owner approval)
+      - name: Fetch exact reviewed OCI image digest, never moving tag
         shell: bash
         run: |
-          docker pull --platform linux/amd64 python:3.11-slim
-      - name: Record exact locally resolved OCI digest for this ephemeral test
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json, os, subprocess
-          raw = subprocess.check_output([
-              "docker", "image", "inspect", "--format={{json .RepoDigests}}",
-              "python:3.11-slim",
-          ], text=True)
-          refs = json.loads(raw.strip())
-          digests = sorted({ref.rsplit("@sha256:", 1)[1]
-                            for ref in refs
-                            if isinstance(ref, str) and "@sha256:" in ref})
-          if len(digests) != 1 or len(digests[0]) != 64:
-              raise SystemExit("Cannot uniquely pin locally fetched image")
-          image = "python:3.11-slim@sha256:" + digests[0]
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write("OPDB_TEST_IMAGE=" + image + "\n")
-          print("Research-only image resolved from local store:", image)
-          PY
+          docker pull --platform linux/amd64 "$OPDB_TEST_IMAGE"
+          docker image inspect "$OPDB_TEST_IMAGE" --format '{{json .RepoDigests}}'
       - name: Execute ONLY fixed reviewed confinement fixture in a real container
         shell: bash
         run: |
@@ -79,7 +65,31 @@ jobs:
           assert report["automatic_merge_allowed"] is False
           assert report["launch_authorized"] is False
           PY
+      - name: Negative control — intentionally remove read-only root flag
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          from foundry.sandbox_policy import plan
+          policy = plan(
+              os.environ["OPDB_TEST_IMAGE"],
+              str(Path(os.environ["GITHUB_WORKSPACE"]) / "foundry" / "fixtures"),
+              12, probe="confinement",
+          )
+          assert policy["state"] == "POLICY_PLAN_ONLY"
+          argv = [arg for arg in policy["command_argv"] if arg != "--read-only"]
+          assert len(argv) == len(policy["command_argv"]) - 1
+          result = subprocess.run(argv, capture_output=True, text=True, timeout=12)
+          report = json.loads(result.stdout.strip())
+          assert result.returncode != 0
+          assert report["probe"] == "synthetic-fixed-review-only"
+          assert report["passed"] is False
+          assert report["checked"]["root_filesystem_read_only"] is False
+          assert report["checked"]["network_only_loopback"] is True
+          print("EXPECTED_NEGATIVE_CONTROL: removing --read-only was detected")
+          PY
       - name: Confirm source checkout remains unmodified
         run: git diff --exit-code
       - name: Declare exact evidence boundary
-        run: echo "Observed fixed synthetic Docker probe only. Pinned-at-runtime research image NOT independently supply-chain approved. No LLM, arbitrary patches, real agent sandbox attestation, production, merge or launch."
+        run: echo "Observed fixed synthetic Docker probe only. Digest is now pinned and reproducible, but NOT independent supply-chain approved. No LLM, arbitrary patches, real agent sandbox attestation, production, merge or launch."
