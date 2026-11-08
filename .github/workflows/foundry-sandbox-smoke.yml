@@ -180,7 +180,7 @@ jobs:
           from pathlib import Path
           from foundry.worker_contract import _request_for
           Path("s008-request.json").write_text(
-              json.dumps(_request_for(os.environ["GITHUB_SHA"]))+"\\n",
+              json.dumps(_request_for(os.environ["GITHUB_SHA"])),
               encoding="utf-8"
           )
           PY
