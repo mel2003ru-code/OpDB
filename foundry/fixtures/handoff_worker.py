@@ -14,6 +14,8 @@ import sys
 
 _ORIGINAL_SHA = "97ecad52211a40a7ebf00716cc9ee9c2f76a9b4a5eda731afe2921221f3e7452"
 _SHA = re.compile(r"[a-f0-9]{40}\Z")
+_NONCE = re.compile(r"[0-9a-f]{32}\Z")
+_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _PATH = "foundry/fixtures/calculator.py"
 _BEFORE = "    return left - right\n"
 _AFTER = "    return left + right\n"
@@ -35,9 +37,13 @@ def inspect():
 
 def main():
     sha = os.environ.get("OPDB_SOURCE_SHA", "")
+    nonce = os.environ.get("OPDB_SESSION_NONCE", "")
+    digest = os.environ.get("OPDB_REQUEST_SHA256", "")
     checks = inspect()
     reply = None
-    if _SHA.fullmatch(sha) and all(type(v) is bool and v for v in checks.values()):
+    if (_SHA.fullmatch(sha) and _NONCE.fullmatch(nonce)
+            and _DIGEST.fullmatch(digest)
+            and all(type(v) is bool and v for v in checks.values())):
         with Path("/work/calculator.py").open("rb") as file:
             original = file.read(4097)
         if len(original) <= 4096 and hashlib.sha256(original).hexdigest() == _ORIGINAL_SHA:
@@ -57,6 +63,8 @@ def main():
     passed = reply is not None
     print(json.dumps({
         "probe": "fixed-data-only-handoff-s008",
+        "session_nonce": nonce,
+        "request_sha256": digest,
         "passed": passed,
         "checked": checks,
         "reply": reply,
