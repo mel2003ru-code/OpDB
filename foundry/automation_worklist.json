@@ -17,8 +17,8 @@
     },
     {
       "id": "FND-009C",
-      "status": "READY",
-      "evidence_url": null
+      "status": "DONE",
+      "evidence_url": "https://github.com/mel2003ru-code/OpDB/commit/3376e53e360b323b7934d731aac75a37499b4ba9"
     }
   ]
 }
