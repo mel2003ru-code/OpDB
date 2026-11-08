@@ -13,6 +13,7 @@ ISSUE = 31
 API = "https://api.github.com/repos/" + REPO + "/issues/" + str(ISSUE)
 URL = "https://github.com/" + REPO + "/issues/" + str(ISSUE)
 SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
+_MAX_ISSUE_JSON_BYTES = 32 * 1024
 
 
 def admit_issue(issue, checked_out_sha):
@@ -46,8 +47,13 @@ def main(argv=None):
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
-        issue = json.loads(Path(args.issue_json).read_text(encoding="utf-8"))
-        task, problem = admit_issue(issue, args.expected_sha)
+        with Path(args.issue_json).open("rb") as handle:
+            raw = handle.read(_MAX_ISSUE_JSON_BYTES + 1)
+        if len(raw) > _MAX_ISSUE_JSON_BYTES:
+            task, problem = None, "GitHub issue JSON exceeds 32 KiB"
+        else:
+            issue = json.loads(raw.decode("utf-8", "strict"))
+            task, problem = admit_issue(issue, args.expected_sha)
     except (OSError, ValueError, UnicodeError) as exc:
         task, problem = None, type(exc).__name__ + ": " + str(exc)
     if task is None:
