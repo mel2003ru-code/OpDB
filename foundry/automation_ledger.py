@@ -267,7 +267,7 @@ def main(argv=None):
     except (OSError, ValueError, UnicodeError) as exc:
         decision = _decision("HOLD_INVALID", type(exc).__name__ + ": " + str(exc))
     print(json.dumps(decision, sort_keys=True, ensure_ascii=False))
-    return 0 if decision["state"] in ("RECORDED", "ALREADY_DONE", "ALREADY_CLAIMED") else 2
+    return 0 if decision["state"] == "RECORDED" else 2
 
 
 if __name__ == "__main__":
