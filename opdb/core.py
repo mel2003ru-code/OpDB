@@ -23,6 +23,16 @@ MAX_SCAN_BYTES = 8 * 1024 * 1024
 MAX_SNAPSHOT_ROWS = 50_000
 MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
+# Canonical contract for this experimental table. This is structural validation
+# on open, NOT authentication against privileged writers or later DDL changes.
+_SOURCE_TABLE_SQL = (
+    "CREATE TABLE opdb_source_kv "
+    "(k TEXT PRIMARY KEY COLLATE BINARY NOT NULL, v BLOB NOT NULL)"
+)
+_SOURCE_CREATE_SQL = _SOURCE_TABLE_SQL.replace(
+    "CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1
+)
+
 @dataclass(frozen=True)
 class SourceSnapshot:
     rows: tuple[tuple[str, bytes], ...]
@@ -119,10 +129,19 @@ class TruthStore:
             if path != ":memory:":
                 self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=FULL")
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS opdb_source_kv "
-                "(k TEXT PRIMARY KEY COLLATE BINARY NOT NULL, v BLOB NOT NULL)"
-            )
+            self._db.execute(_SOURCE_CREATE_SQL)
+            # SQLite accepts CREATE TABLE IF NOT EXISTS even if the name
+            # already belongs to a VIEW. A view can fabricate source reads,
+            # and a substituted table can remove the KV uniqueness contract.
+            # Fail closed on open rather than adopting an unknown schema.
+            schema = self._db.execute(
+                "SELECT type, sql FROM sqlite_schema WHERE name = ?",
+                ("opdb_source_kv",),
+            ).fetchone()
+            if schema != ("table", _SOURCE_TABLE_SQL):
+                raise SourceIntegrityError(
+                    "unexpected source table schema; refusing open"
+                )
         except BaseException:
             self._db.close()
             self._closed = True

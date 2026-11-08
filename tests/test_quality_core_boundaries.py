@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from opdb.core import TruthStore
+from opdb.core import TruthStore, SourceIntegrityError
 
 
 class IndependentBoundaryQuality(unittest.TestCase):
@@ -29,6 +29,47 @@ class IndependentBoundaryQuality(unittest.TestCase):
     def _oracle(self):
         with sqlite3.connect(self.path) as db:
             return tuple(db.execute("SELECT k,v FROM opdb_source_kv ORDER BY k"))
+
+    def test_legitimate_source_schema_reopens_with_persisted_value(self):
+        self.store.put("case", b"persisted")
+        self.store.close()
+        with TruthStore(self.path) as reopened:
+            self.assertEqual(reopened.get("case"), b"persisted")
+            self.assertEqual(reopened.read_mode, "SOURCE_ONLY")
+            self.assertFalse(reopened.lens_enabled)
+
+    def test_existing_view_must_not_masquerade_as_source_table(self):
+        self.store.close()
+        with sqlite3.connect(self.path) as db:
+            db.execute("DROP TABLE opdb_source_kv")
+            db.execute(
+                "CREATE VIEW opdb_source_kv AS "
+                "SELECT 'forged' AS k, CAST('payload' AS BLOB) AS v"
+            )
+            # SQLite itself accepts CREATE TABLE IF NOT EXISTS for a VIEW.
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS opdb_source_kv "
+                "(k TEXT PRIMARY KEY COLLATE BINARY NOT NULL, v BLOB NOT NULL)"
+            )
+        with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
+            TruthStore(self.path)
+
+    def test_incompatible_existing_kv_tables_refused_at_open(self):
+        self.store.close()
+        altered_tables = (
+            "CREATE TABLE opdb_source_kv (k TEXT, v BLOB)",
+            "CREATE TABLE opdb_source_kv "
+            "(k TEXT PRIMARY KEY COLLATE NOCASE NOT NULL, v BLOB NOT NULL)",
+            "CREATE TABLE opdb_source_kv "
+            "(k TEXT PRIMARY KEY COLLATE BINARY NOT NULL, v TEXT NOT NULL)",
+        )
+        for ddl in altered_tables:
+            with self.subTest(ddl=ddl):
+                with sqlite3.connect(self.path) as db:
+                    db.execute("DROP TABLE IF EXISTS opdb_source_kv")
+                    db.execute(ddl)
+                with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
+                    TruthStore(self.path)
 
     def test_abort_generator_at_first_invalid_operation(self):
         """Do not prefetch thousands of operations after an invalid first one."""

@@ -41,3 +41,12 @@ Safety must define enforceable writer restriction or trustworthy committed chang
 - **Review independence:** These tests were authored separately from Core tests on a distinct Quality branch, but the analysis still originates in the same assistant-mediated project workflow. It is NOT an external accountable human Quality sign-off.
 
 **Governance:** draft PR #34 is stacked on Core draft PR #33. Review and merge Quality findings into Core only after independent review; do NOT merge into main or production solely because CI is green. The owner launch button remains disabled, and no launch timestamp has been recorded.
+
+
+## Quality Q-Core-002 — startup schema substitution negative control
+
+**Reproduced standalone SQLite behavior:** `CREATE TABLE IF NOT EXISTS opdb_source_kv (...)` silently succeeds when an existing **VIEW** already uses that name; a caller can subsequently select fabricated `k, v` data. A substituted ordinary table can also remove the primary-key/BINARY-collation contract. The prior `TruthStore.__init__` did not verify the schema object after `IF NOT EXISTS`.
+
+**Bounded mitigation in this existing stacked Quality draft PR:** after opening SQLite and issuing the canonical `CREATE TABLE IF NOT EXISTS`, verify the `sqlite_schema` object is a real `table` with exactly the expected canonical SQL definition. If not, raise `SourceIntegrityError` and close the connection. Legitimate files created by this adapter still reopen and preserve data. Explicit negative tests cover a forged VIEW, missing PK, wrong NOCASE PK collation and wrong value-column type.
+
+**Scope/limitations:** This strict startup check intentionally rejects otherwise equivalent but differently declared preexisting tables; this experimental adapter does not offer migrations. It does **not** authenticate the SQLite file, prevent privileged writers from changing tables/triggers *after* open, protect journal capture, or establish trusted Lens admission. P0 #21 remains OPEN, all user reads remain SQLite SOURCE_ONLY and `admit_lens` continues to refuse. The standalone SQLite demonstration exercised the schema condition, **not the full repository regression tests**. CI on the eventual new PR SHA is **NOT VERIFIED** until GitHub Actions executes a real runner with steps; historical PASS on the previous SHA cannot be carried forward.
