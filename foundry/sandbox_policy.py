@@ -25,7 +25,7 @@ _REVIEWED_CONTENT_SHA256 = {
     "quality_probe.py": "3f636ed87e607ec2f5869492336449cc313b5deaf3ccb4a9338f9e31c79347a2",
     "sandbox_runtime_probe.py": "a0f56d4e067186e1a7f0c5babca9539f635739e3b5250948bf95bd08afd3268a",
     "sandbox_adversarial_probe.py": "928d8d75bf9dd62ff9f27f9579edbb6fddf3a3b558d05d8b43db23206c2078ba",
-    "handoff_worker.py": "e44d1af3bb9fa6e1b20be4789bbdc3b4a3d6e147ed57c5bf4bde273929ac350a",
+    "handoff_worker.py": "64c8c4750281e59c1974ca65eb62004e438ebb7021347e665e2e37d39daf848e",
 }
 _MAX_REVIEWED_BYTES = 16 * 1024
 
