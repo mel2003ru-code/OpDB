@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from .probes_extended import EXTENDED_PROBES, MODEL_TRACKS
+from .p0_negative_control import probe_p0_negative_control
 
 TRACKS = [(f"R{i:02d}", i + 6) for i in range(1, 11)] + [
     ("TASK-001", 2), ("TASK-002", 3), ("TASK-003", 4)
@@ -180,7 +181,16 @@ def run_cycle(seed):
                 "seed": local_seed, "elapsed_s": round(time.perf_counter() - t0, 6),
                 "error": "%s: %s" % (type(exc).__name__, exc)
             })
+    try:
+        negative = probe_p0_negative_control(seed + 50051)
+        negative_controls = [negative]
+    except Exception as exc:
+        negative_controls = [{
+            "status": "FAIL", "name": "P0_UNPROTECTED_LENS",
+            "error": "%s: %s" % (type(exc).__name__, exc)
+        }]
     return {
+        "negative_controls": negative_controls,
         "start_utc": started.isoformat(),
         "seed": seed,
         "repository_sha": os.getenv("GITHUB_SHA", "not-provided"),
@@ -216,12 +226,19 @@ def main():
         details = item.get("scope", item.get("reason", item.get("error", "")))
         rows.append("| [%s](https://github.com/mel2003ru-code/OpDB/issues/%d) | %s | %s |" %
                     (item["track"], item["issue"], item["status"], details.replace("|", "\\|")))
+    rows.extend(["", "### P0 adversarial negative control"])
+    for control in report["negative_controls"]:
+        rows.append("- **%s** — %s" % (
+            control["status"], control.get("scope", control.get("error", ""))
+        ))
+    rows.append("These are expected bugs in deliberately unsafe models, NOT passing OpDB safety tests.")
     summary = "\n".join(rows) + "\n"
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
             handle.write(summary)
-    if any(item["status"] == "FAIL" for item in report["results"]):
+    if (any(item["status"] == "FAIL" for item in report["results"])
+            or any(item["status"] == "FAIL" for item in report["negative_controls"])):
         return 1
     return 0
 
