@@ -8,6 +8,7 @@ remain forbidden. This module is not a production security boundary.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import secrets
@@ -28,6 +29,7 @@ _REPORT_KEYS = frozenset({
     "probe", "passed", "checked", "reply", "model_invoked",
     "arbitrary_model_code_executed", "github_write_allowed",
     "trusted_controller_attested", "launch_authorized",
+    "session_nonce", "request_sha256",
 })
 
 
@@ -45,7 +47,7 @@ def _denied(state, reason):
     }
 
 
-def _parse_report(stdout):
+def _parse_report(stdout, expected_nonce, expected_request_sha256):
     def no_duplicates(pairs):
         out = {}
         for key, value in pairs:
@@ -60,6 +62,10 @@ def _parse_report(stdout):
     if type(obj) is not dict or set(obj) != _REPORT_KEYS:
         return None
     if (obj["probe"] != "fixed-data-only-handoff-s008"
+            or type(obj["session_nonce"]) is not str
+            or obj["session_nonce"] != expected_nonce
+            or type(obj["request_sha256"]) is not str
+            or obj["request_sha256"] != expected_request_sha256
             or obj["passed"] is not True
             or type(obj["checked"]) is not dict
             or set(obj["checked"]) != _OBSERVED
@@ -81,6 +87,12 @@ def run_isolated_handoff(request, checkout_sha, checkout_root):
         return _denied("BLOCKED", "Checkout identity is not controller-owned")
     if not _docker_available():
         return _denied("NOT_CONFIGURED", "Docker executable not available")
+    # This is session freshness and request integrity, NOT an authenticated
+    # trust root: a PR-controlled host could still mint or forge both values.
+    nonce = secrets.token_hex(16)
+    request_sha256 = hashlib.sha256(json.dumps(
+        request, sort_keys=True, separators=(",", ":"),
+    ).encode("ascii")).hexdigest()
     policy = plan(PINNED_IMAGE, _REVIEWED_FIXTURE, time_seconds=12, probe="handoff")
     if policy["state"] != "POLICY_PLAN_ONLY":
         return _denied("BLOCKED", "Pinned reviewed handoff fixture not admitted")
@@ -105,6 +117,8 @@ def run_isolated_handoff(request, checkout_sha, checkout_root):
             argv[position:position] = [
                 "--name=" + name, "--cidfile=" + str(cidfile),
                 "--env=OPDB_SOURCE_SHA=" + checkout_sha,
+                "--env=OPDB_SESSION_NONCE=" + nonce,
+                "--env=OPDB_REQUEST_SHA256=" + request_sha256,
             ]
             result = None
             failure = None
@@ -132,7 +146,7 @@ def run_isolated_handoff(request, checkout_sha, checkout_root):
             if failure is not None or result is None or result.returncode != 0:
                 return _denied("BLOCKED", "Fixed worker failed: " + (failure or "guest exit"))
             try:
-                reply = _parse_report(result.stdout)
+                reply = _parse_report(result.stdout, nonce, request_sha256)
             except (ValueError, TypeError, UnicodeError):
                 reply = None
             if reply is None:
