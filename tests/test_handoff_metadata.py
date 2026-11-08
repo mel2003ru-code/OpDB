@@ -44,5 +44,32 @@ class HandoffValidationTests(unittest.TestCase):
         o=self.sample(); o["date_utc"]="2026-02-30T00:00:00Z"
         self.assertTrue(any("calendar date" in e for e in self.check(o)))
 
+
+    def test_pass_requires_commit_sha(self):
+        o=self.sample()
+        o.update(status="PASS", tested_environment="Linux / SQLite", reproduce_commands=["python -m unittest"], tests_passed=["oracle parity"], artifacts=["report.json"])
+        self.assertTrue(any("commit_sha" in error for error in self.check(o)))
+
+    def test_pass_requires_passed_tests_and_artifacts(self):
+        o=self.sample()
+        o.update(status="PASS",commit_sha="a"*40, tested_environment="Linux / SQLite", reproduce_commands=["python -m unittest"])
+        errors=self.check(o)
+        self.assertTrue(any("passed test" in error for error in errors))
+        self.assertTrue(any("artifacts" in error for error in errors))
+
+    def test_pass_with_complete_metadata(self):
+        o=self.sample()
+        o.update(status="PASS",commit_sha="a"*40, tested_environment="Linux / SQLite",
+                 reproduce_commands=["python -m unittest"], tests_passed=["oracle parity"], artifacts=["report.json"])
+        self.assertEqual(self.check(o),[])
+
+    def test_nonstring_array_entry_rejected(self):
+        o=self.sample();o["artifacts"]=[None]
+        self.assertTrue(any("artifacts" in error for error in self.check(o)))
+
+    def test_blank_array_entry_rejected(self):
+        o=self.sample();o["reproduce_commands"]=[" "]
+        self.assertTrue(any("reproduce_commands" in error for error in self.check(o)))
+
 if __name__=="__main__":
     unittest.main()
