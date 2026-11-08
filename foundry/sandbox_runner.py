@@ -10,7 +10,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 
@@ -73,6 +72,10 @@ def _run(args, *, timeout):
     )
 
 
+def _docker_available():
+    return Path(DOCKER).is_file() and os.access(DOCKER, os.X_OK)
+
+
 def run_probe(probe):
     """Run a single reviewed probe in a no-network, read-only Docker guest.
 
@@ -81,7 +84,7 @@ def run_probe(probe):
     """
     if type(probe) is not str or probe not in ALLOWED_PROBES:
         return _response("BLOCKED", "Unknown probe; executable input forbidden")
-    if not Path(DOCKER).is_file() or not os.access(DOCKER, os.X_OK):
+    if not _docker_available():
         return _response("NOT_CONFIGURED", "Docker executable missing on runner", probe)
     policy = plan(PINNED_IMAGE, _REVIEWED_FIXTURE, time_seconds=12, probe=probe)
     if policy["state"] != "POLICY_PLAN_ONLY":
