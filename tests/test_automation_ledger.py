@@ -164,6 +164,20 @@ class AutomationLedgerTests(unittest.TestCase):
             self.assertEqual(validate(load(output))["FND-009B"], "CLAIMED")
             self.assertEqual(path.read_bytes(), before)
 
+    def test_cli_duplicate_claim_returns_nonzero_no_new_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = seeded()
+            _, claimed = record(ledger, task_id="FND-009B", action="CLAIM",
+                                observed_sha=HEAD)
+            path = Path(tmp) / "claimed.json"
+            path.write_text(json.dumps(claimed))
+            target = Path(tmp) / "result.json"
+            code = main(["--ledger", str(path), "--output", str(target),
+                         "--task-id", "FND-009B", "--action", "CLAIM",
+                         "--observed-sha", HEAD])
+            self.assertEqual(code, 2)
+            self.assertFalse(target.exists())
+
     def test_duplicate_and_oversize_json_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "input.json"
