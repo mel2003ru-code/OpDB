@@ -136,6 +136,26 @@ class ReviewHandoffTests(unittest.TestCase):
             stored = json.loads(output.read_text(encoding="utf-8"))
             self.assertFalse(stored["reviewer_contacted"])
 
+    def test_ci_summary_mismatch_is_a_hold(self):
+        snap, led, work = inputs()
+        snap["ci_state"] = "PASS"
+        self.assertEqual(handoff(snap, led, work, current_sha=PR_HEAD)["state"],
+                         "HOLD")
+
+    def test_unrelated_workflow_and_missing_main_sha_hold(self):
+        snap, led, work = inputs()
+        name = next(iter(snap["workflow_run_ids"]))
+        rid = snap["workflow_run_ids"].pop(name)
+        state = snap["workflow_observations"].pop(name)
+        snap["workflow_run_ids"]["Foundry fake reviewer"] = rid
+        snap["workflow_observations"]["Foundry fake reviewer"] = state
+        self.assertEqual(handoff(snap, led, work, current_sha=PR_HEAD)["state"],
+                         "HOLD")
+        snap, led, work = inputs()
+        snap["main_sha"] = None
+        self.assertEqual(handoff(snap, led, work, current_sha=PR_HEAD)["state"],
+                         "HOLD")
+
     def test_loader_rejects_duplicates_and_oversize(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "data.json"
