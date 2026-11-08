@@ -50,3 +50,25 @@ D. Set up isolated staging with reproducible packaged artifact, migration safety
 E. Integrate authenticated PAUSE_FOR_REVIEW into the autonomous orchestration loop so NEW change proposals halt for owner+Quality scientific review while monitoring and safety checks continue. No raw JSON flag may directly pause, approve releases or assert proof. The stop decision must remain auditable and reversible by owner decision.
 
 The current OpDB is a research effort; there is no claimed native production DBMS. No users, VPS services, external databases, access control, paid inference APIs or production systems are modified by this phase.
+
+## Research-to-action routing (implemented in this PR, pending review)
+
+`foundry/loop.py` consumes one complete `research.cycle` report and the exact checked-out Git SHA. It requires all 13 uniquely mapped research tracks, consistent statuses, an explicit UTC timestamp, environment identifiers and a reproduced P0 adversarial negative control. It emits a deterministic advisory JSON decision:
+
+- `HOLD_EVIDENCE`: missing, inconsistent, mismatched or non-canonical report; fail closed.
+- `ESCALATE_SAFETY`: expected P0 unsafe reference control did not reproduce; inspect fixture and hold assertions.
+- `INVESTIGATE_FAILED_TRACK`: select a failed research probe using Safety/Core/Quality then high-risk reference-priority order.
+- `REQUEST_EXECUTABLE_ADAPTER`: 10 SQLite/Python/model checks passed but actual engineering implementation is missing; point to Core #3.
+- `AWAIT_INDEPENDENT_QUALITY`: even if all three task probes eventually report implementation smoke PASS, no certified safety or production guarantee follows.
+
+All decisions explicitly disallow automated code changes, merge, staging and production. The planner does **not** create a PR or independently execute LLM agents. It proposes one bounded next task, which existing daily engineering autopilot can consider only after inspecting GitHub and avoiding open duplicate PRs. It does not activate the benchmark superiority pause signal from unauthenticated JSON.
+
+The existing 30-minute research Action now computes the plan and records it in the run logs and daily status Issue #17, after a reviewed merge. The PR's own CI runs a fixed-seed research cycle and checks its generated decision against the currently missing executable adapter. This closes *research → deterministic decision*, not the full autonomous *decision → code → release* loop.
+
+Run locally (after setting a known 40-character SHA in GITHUB_SHA):
+
+    python -m research.cycle --seed 20261108 --output research-cycle.json
+    python -m foundry.loop --research research-cycle.json --expected-sha "$GITHUB_SHA" --output foundry-next-step.json
+    python -m unittest -v tests.test_foundry_loop
+
+GitHub CI supplies GITHUB_SHA automatically; no assumption about private infrastructure is made.
