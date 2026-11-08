@@ -7,8 +7,8 @@
   "items": [
     {
       "id": "FND-009A",
-      "status": "READY",
-      "evidence_url": null
+      "status": "DONE",
+      "evidence_url": "https://github.com/mel2003ru-code/OpDB/commit/b2bf62645528b1fa880cb1238a08064f27b9d638"
     },
     {
       "id": "FND-009B",
