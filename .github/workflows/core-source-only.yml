@@ -1,0 +1,47 @@
+name: Core 0.1 Source-only independent Oracle tests
+on:
+  pull_request:
+    paths:
+      - 'opdb/**'
+      - 'tests/test_core_source_only.py'
+      - '.github/workflows/core-source-only.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout isolated candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Core and independent oracle regression tests
+        run: python -m unittest -v tests.test_core_source_only
+      - name: Full repository regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Assert source-only gating against an actual candidate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from opdb import TruthStore
+          with TruthStore(":memory:") as db:
+              db.put("key", b"truth")
+              candidate = db.build_lens_candidate()
+              assert db.get("key") == b"truth"
+              assert db.check_candidate_against_source(candidate)
+              admission = db.admit_lens(candidate)
+              assert not admission.accepted
+              assert admission.mode == "SOURCE_ONLY"
+              assert not db.lens_enabled
+          print("P0 #21: source-only; no verified Lens cutover")
+          PY
+      - name: Declare experimental limitations
+        run: echo "SQLite-backed Source-only KV only. Not independently attested, not native OpDB and not a verified Lens."
