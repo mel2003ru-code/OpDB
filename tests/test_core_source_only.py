@@ -115,6 +115,22 @@ class CoreOracleTests(unittest.TestCase):
             self.store.apply([("put", "a", b"1"), ("put", "bad", "not bytes")])
         self.assertEqual(oracle(self.path), ())
 
+    def test_streaming_unbounded_generator_stops_at_batch_limit(self):
+        def forever():
+            n = 0
+            while True:
+                yield ("delete", f"key{n}")
+                n += 1
+        with self.assertRaisesRegex(ValueError, "10000"):
+            self.store.apply(forever())
+        self.assertEqual(oracle(self.path), ())
+
+    def test_batch_payload_is_bounded_before_write(self):
+        large = b"x" * (1024 * 1024)
+        with self.assertRaisesRegex(ValueError, "8 MiB"):
+            self.store.apply([("put", f"k{i}", large) for i in range(9)])
+        self.assertEqual(oracle(self.path), ())
+
     def test_trigger_abort_rolls_back_entire_batch(self):
         with sqlite3.connect(self.path) as db:
             db.execute(
