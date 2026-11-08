@@ -14,6 +14,7 @@ from pathlib import Path
 
 from foundry.automation_ledger import validate, reconcile, HISTORIC_A_URL
 from foundry.automation_queue import REPO, CI_STATES
+from foundry.github_snapshot import WORKFLOWS
 
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 REPO_URL = "https://github.com/" + REPO
@@ -81,14 +82,22 @@ def handoff(snapshot, ledger, worklist, *, current_sha):
             or any(type(sha) is not str or SHA40.fullmatch(sha) is None
                    for sha in heads.values())
             or type(ci) is not str or ci not in CI_STATES
+            or type(snapshot.get("main_sha")) is not str
+            or SHA40.fullmatch(snapshot["main_sha"]) is None
             or type(runs) is not dict or type(observed) is not dict
-            or set(runs) != set(observed) or len(runs) != 3):
+            or set(runs) != set(WORKFLOWS) or set(observed) != set(WORKFLOWS)):
         return _safe_result("HOLD", ["Incomplete PR-head or workflow provenance"])
     for name, number in runs.items():
         if (type(name) is not str or not name.startswith("Foundry ")
                 or (number is not None and (type(number) is not int or number <= 0))
                 or observed[name] not in CI_STATES):
             return _safe_result("HOLD", ["Malformed workflow reference"])
+    statuses = set(observed.values())
+    inferred = ("FAIL_EXECUTED" if "FAIL_EXECUTED" in statuses else
+                "PASS" if statuses == {"PASS"} else
+                "NO_RUNNER" if statuses == {"NO_RUNNER"} else "UNKNOWN")
+    if inferred != ci:
+        return _safe_result("HOLD", ["Workflow observations contradict CI summary"])
     if (snapshot.get("issue_31_reported_open") is not True
             or type(snapshot.get("issue_21_reported_open")) is not bool
             or snapshot.get("lens_blocked") is not True):
