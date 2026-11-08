@@ -1,0 +1,80 @@
+name: Foundry reviewed Docker isolation smoke
+
+on:
+  pull_request:
+    paths:
+      - 'foundry/sandbox_policy.py'
+      - 'foundry/sandbox_runner.py'
+      - 'foundry/fixtures/sandbox_runtime_probe.py'
+      - 'foundry/fixtures/sandbox_adversarial_probe.py'
+      - 'tests/test_sandbox_policy.py'
+      - 'tests/test_sandbox_runner.py'
+      - '.github/workflows/foundry-sandbox-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-sandbox-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHON_IMAGE: 'python:3.11-slim@sha256:db20d8506e2f15b6db39b40b6015ca46bae855dec6dd326d462cfe79ae972893'
+    steps:
+      - name: Checkout reviewed synthetic probes without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python 3.11 for orchestrator
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify fail-closed Docker driver with mock adversarial tests
+        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_runner
+      - name: Pull only reviewed immutable Docker Official Image before execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$PYTHON_IMAGE"
+          docker image inspect "$PYTHON_IMAGE" >/dev/null
+      - name: Execute fixed confinement probe in actual isolated Docker guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m foundry.sandbox_runner --probe confinement --output confinement-report.json
+          python - <<'PY'
+          import json
+          r=json.load(open("confinement-report.json", encoding="utf-8"))
+          assert r["state"]=="REVIEWED_PROBE_PASS" and r["observed"]
+          assert all(r["observed"].values())
+          assert not r["agent_sandbox_attested"]
+          assert not r["candidate_executed"]
+          assert not r["github_write_allowed"]
+          assert not r["production_allowed"]
+          assert not r["launch_authorized"]
+          PY
+      - name: Execute fixed adversarial deny-operation probe in actual guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m foundry.sandbox_runner --probe adversarial --output adversarial-report.json
+          python - <<'PY'
+          import json
+          r=json.load(open("adversarial-report.json", encoding="utf-8"))
+          assert r["state"]=="REVIEWED_PROBE_PASS" and r["observed"]
+          assert all(r["observed"].values())
+          assert not r["agent_sandbox_attested"]
+          assert not r["untrusted_model_code_executed"]
+          assert not r["github_write_allowed"]
+          assert not r["automatic_merge_allowed"]
+          assert not r["production_allowed"]
+          PY
+      - name: Fail if checked-out repository was modified
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard -- foundry tests)"
+      - name: State only the observed narrow result
+        run: echo "Only pre-reviewed synthetic Docker probes passed on this runner; no LLM, arbitrary code, PR write, merge, deploy, or launch."
