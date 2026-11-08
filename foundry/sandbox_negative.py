@@ -70,7 +70,14 @@ def verify_negative_controls(image, fixture, *, budget_seconds=12):
             proc = _run(unsafe_argv, budget_seconds)
             if proc.returncode == 0:
                 return _deny(name + ": removal not detected by exit status", report)
-            guest = json.loads(proc.stdout.strip())
+            try:
+                guest = json.loads(proc.stdout.strip())
+            except (ValueError, TypeError):
+                return _deny(
+                    name + ": guest report absent/malformed, docker exit "
+                    + str(proc.returncode) + "; cannot claim observed isolation",
+                    report,
+                )
             if type(guest) is not dict:
                 return _deny(name + ": malformed guest report", report)
             checks = guest.get("checked")
