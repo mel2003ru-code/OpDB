@@ -6,7 +6,7 @@ Date: 2026-11-08. Status: experimental workflow. A successful GitHub Actions run
 
 GitHub Actions triggers the small, isolated research checker at UTC :07 and :37. Every run enumerates 10 research areas R01-R10 and 3 engineering areas TASK-001/002/003, records an explicit status and uploads a JSON artifact and a Step Summary.
 
-Currently **R03**, **R07** and **R10** contain narrowly scoped, reproducible SQLite-only probes (dynamic-index query equivalence; process-exit WAL recovery; metamorphic SUM oracle). Other areas intentionally show **NOT_CONFIGURED**. These tests do **not** implement the OpDB engine or autonomous scientific discovery. A Python/SQLite PASS is not a production correctness proof and never authorizes a merge.
+Currently **R01–R10** have narrowly scoped SQLite/Python or synthetic-model checks. R01: transactional aggregate equivalence; R02: logical SQLite file page footprint; R03: dynamic-index oracle; R04: FIFO/LRU cache models; R05: synthetic prediction admission; R06: SQLite concurrent writers and snapshots; R07: os._exit WAL recovery; R08: tail latency including index DDL; R09: synthetic cost/validity guard; R10: metamorphic SUM oracle. TASK-001/002/003 remain **NOT_CONFIGURED** because no independent working engine/Safety/Quality implementation has been admitted. Models (R04/R05/R09) report MODEL_SMOKE_PASS and SQLite-backed checks report SQLITE_SMOKE_PASS. These tests do **not** implement the OpDB engine or autonomous scientific discovery. A Python/SQLite PASS is not a production correctness proof and never authorizes a merge.
 
 New probes must be proposed through a PR, tested independently, reviewed by Quality and admitted to the schedule from trusted main. Never execute untrusted PR code in a write-privileged scheduled runner.
 
@@ -20,7 +20,7 @@ A true multi-agent research executor needs a separately provisioned model runtim
 
 - A single bounded 5-minute job; actual short probes should finish far sooner.
 - Read-only GitHub token, no external Python packages or network requests from tests.
-- Results stored for 7 days. GitHub Actions limits for private repositories may apply.
+- Results are retained in GitHub Actions Job Summary and log output (not artifact uploads), because the repository encountered an exhausted Actions artifact storage quota. GitHub Actions minutes for a private repository may still be limited or billable.
 - GitHub cron executions can be delayed or skipped; reports must distinguish missing runs.
 - Full model-generated scientific work cannot be inferred from this heartbeat.
 
