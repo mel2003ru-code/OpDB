@@ -7,11 +7,13 @@ on:
       - 'tests/test_foundry_loop.py'
       - 'tests/test_launch_gate.py'
       - 'tests/test_agent_executor.py'
+      - 'tests/test_issue_intake.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
   evidence-preflight:
@@ -27,7 +29,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake
       - name: Demand explicit NOT_CONFIGURED without real evidence
         shell: bash
         run: |
@@ -54,6 +56,18 @@ jobs:
         run: |
           python -m foundry.launch_gate --output launch-readiness.json
           python -c 'import json; r=json.load(open("launch-readiness.json")); assert r["state"] == "NOT_READY" and not r["button_enabled"] and not r["launch_authorized"] and not r["launched"] and r["launched_at_utc"] is None'
+      - name: Retrieve actual GitHub tracking Issue #31 (read-only)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/31" > actual-issue-31.json
+      - name: Admit only approved issue metadata, never issue instructions
+        shell: bash
+        run: |
+          python -m foundry.issue_intake --issue-json actual-issue-31.json --expected-sha "$GITHUB_SHA" --output admitted-task.json
+          python -m foundry.agent_executor --task-file admitted-task.json --expected-sha "$GITHUB_SHA" --output admitted-demo.json
+          python -c 'import json; a=json.load(open("admitted-demo.json")); assert a["state"] == "DRAFT_PROPOSAL_READY" and a["negative_control_failed_as_expected"] and a["candidate_tests_passed"] and not a["model_invoked"] and not a["repository_modified"] and not a["pull_request_created"] and not a["production_allowed"] and not a["launch_authorized"]'
       - name: Exercise bounded offline executor on a trusted synthetic task
         shell: bash
         run: |
