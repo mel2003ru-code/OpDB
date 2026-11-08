@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "repository": "mel2003ru-code/OpDB",
+  "pr_number": 32,
+  "issue_number": 31,
+  "security_blocker": 21,
+  "items": [
+    {
+      "id": "FND-009A",
+      "status": "READY",
+      "evidence_url": null
+    },
+    {
+      "id": "FND-009B",
+      "status": "READY",
+      "evidence_url": null
+    },
+    {
+      "id": "FND-009C",
+      "status": "READY",
+      "evidence_url": null
+    }
+  ]
+}
