@@ -34,15 +34,17 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         return dict(locked, state="BLOCKED", reason="Exact allowlisted image digest required")
     if type(time_seconds) is not int or not 1 <= time_seconds <= _MAX_SECONDS:
         return dict(locked, state="BLOCKED", reason="Invalid bounded time budget")
-    if probe not in ("quality", "confinement"):
+    if type(probe) is not str or probe not in ("quality", "confinement", "adversarial"):
         return dict(locked, state="BLOCKED", reason="Only reviewed synthetic probes permitted")
     root = Path(fixture_path)
     try:
         if not root.is_absolute() or root.is_symlink() or not root.is_dir():
             return dict(locked, state="BLOCKED", reason="Absolute nonsymlink work directory required")
         checks = ("calculator.py", "quality_probe.py")
-        if probe == "confinement":
+        if probe in ("confinement", "adversarial"):
             checks += ("sandbox_runtime_probe.py",)
+        if probe == "adversarial":
+            checks += ("sandbox_adversarial_probe.py",)
         if any(not (root / x).is_file() or (root / x).is_symlink()
                for x in checks):
             return dict(locked, state="BLOCKED", reason="Missing reviewed fixture files")
@@ -64,7 +66,9 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         "--workdir=/work", "--tmpfs=/tmp:rw,noexec,nosuid,size=8m",
         "--mount=type=bind,src=" + str(root) + ",dst=/work,readonly",
         image, "python", "-I", "-B",
-        _TEST if probe == "quality" else "/work/sandbox_runtime_probe.py",
+        (_TEST if probe == "quality" else
+         "/work/sandbox_runtime_probe.py" if probe == "confinement" else
+         "/work/sandbox_adversarial_probe.py"),
     ]
     return dict(
         locked, state="POLICY_PLAN_ONLY", image=image, command_argv=argv,
@@ -77,7 +81,7 @@ def main(argv=None):
     p.add_argument("--image", help="Previously verified local python:3.11-slim@sha256:<digest>")
     p.add_argument("--fixture", help="Absolute path of an isolated reviewed fixture")
     p.add_argument("--budget-seconds", type=int, default=10)
-    p.add_argument("--probe", choices=("quality", "confinement"), default="quality")
+    p.add_argument("--probe", choices=("quality", "confinement", "adversarial"), default="quality")
     args = p.parse_args(argv)
     result = plan(args.image, args.fixture, args.budget_seconds, args.probe)
     print(json.dumps(result, indent=2, ensure_ascii=False))
