@@ -41,3 +41,55 @@ Unit tests in tests/test_model_gate.py cover malformed or injected policy, task/
 ## Governance
 
 This technical review is from the same assistant-mediated workflow and must **not** count as an external independent sign-off. Next: review #34 → #33, separately review #32, then build and adversarially test a genuinely isolated worker. No main merge or production deployment has occurred.
+
+
+## Follow-up audit S-005 — reviewed-file bytes, not just directory identity
+
+The S-004 finding closed the **external lookalike folder** bypass, but a separate
+path-identity limitation was reproduced: when a directory has already been
+accepted as `_REVIEWED_FIXTURE`, altering an executable fixture inside it was
+not detected by `sandbox_policy.plan`.
+
+- **RED, test first:** test commit
+  `3a22342ff5ebd7beecaa26469bbef85d2ebbe095`, [Sandbox run #42487643863](https://github.com/mel2003ru-code/OpDB/actions/runs/42487643863),
+  with **two expected subtest failures** for `confinement` and `adversarial`.
+  The test uses a disposable directory and temporarily substitutes the policy's
+  reviewed root to demonstrate that matching the directory alone is insufficient.
+- **Fix:** exact reviewed fixture content is now pinned via four explicit SHA-256
+  digests in `foundry/sandbox_policy.py`, with bounded reads and rejection of
+  mismatched or oversized bytes, *before* returning a Docker execution plan.
+  A new source edit must update both file content and manifest in a reviewable PR.
+- **Verified commit:** `4292f2a497b68ba93db51e457b53ab7a188412ff`,
+  [Sandbox CI #42487792183](https://github.com/mel2003ru-code/OpDB/actions/runs/42487792183)
+  **47/47 unit PASS plus real fixed Docker positive/negative controls PASS**,
+  [full CI #42487792375](https://github.com/mel2003ru-code/OpDB/actions/runs/42487792375)
+  **215/215 PASS**, and
+  [Foundry gate #42487792203](https://github.com/mel2003ru-code/OpDB/actions/runs/42487792203)
+  **144/144 PASS**.
+
+**Residual trust boundary:** The digest values are also stored in the PR's
+modifiable source files. This is a consistency check against unreviewed fixture
+changes, *not* an independent attestation. A malicious PR author who controls
+the policy module can change both the fixtures and their hashes. Branch-authored
+code is still executed on a Docker-enabled GitHub Actions runner; a separate
+protected controller and an independently restricted worker are REQUIRED for
+untrusted model-generated code.
+
+## Consolidated PR review disposition at S-005
+
+| PR | Evidence reviewed | Merge / safety verdict |
+|---|---|---|
+| #32 | CI on fixed SHA `4292f2a...`: 215 repository tests, 47 sandbox tests and real reviewed Docker probes PASS. Research policy, zero-cost offline Agent Brain, strict fixture SHA-256. | **CHANGES REQUIRED** for hostile-code support. Branch code is still not an independently trusted controller; no code execution approval, autonomous model, merge or production. |
+| #33 | Exact SHA `14ad0415...`, [Core CI #42478875799](https://github.com/mel2003ru-code/OpDB/actions/runs/42478875799): 43/43 targeted and 68/68 repository tests PASS. | **SOURCE_ONLY RESEARCH PASS** within the tested scope; **NOT READY TO MERGE** without review/integration of #34 and P0 #21 Safety. |
+| #34 | Stacked on #33, exact SHA `30f9ca7...`, [Quality CI #42479902129](https://github.com/mel2003ru-code/OpDB/actions/runs/42479902129): 9/9 resource tests and 77/77 full suite PASS. | **NARROW ADVERSARIAL QA PASS**, separate formal independent review and clean integration into #33 required. No Lens admission or production approval. |
+
+This is an assistant-performed engineering review, **not a separate human or
+independent external audit**. Green GitHub checks are verified observations of
+these tests at specified SHAs, not a blanket release approval. Do not merge PRs
+#32/#33/#34 into `main` or start the full Foundry based on this review.
+
+**Integration order:** review and reconcile stacked #34 with #33; run combined
+Core+Quality tests on the exact integrated SHA; independently review #32's
+protected-controller boundary; keep P0 #21 open until trusted capture is
+genuinely verified; then stage and rehearse recovery and launch authorization.
+No first-launch date or success timestamp exists.
