@@ -119,3 +119,90 @@ is permitted merely to produce a green badge.
 Next: FND-009B must use this bounded snapshot and a durable idempotency record
 to avoid repeating already-completed engineering tasks; it must not promote
 unauthenticated review results into an execution capability.
+
+
+## S-009B: Durable review-only receipts (draft)
+
+The module foundry/automation_ledger.py implements a bounded, append-only
+state machine using only Python's standard library. Its **persisted** state is
+foundry/automation_ledger.json in draft PR #32; no assumption is made
+that the scheduled ChatGPT session retains local files across days.
+
+Each event records the allowlisted task ID, bounded sequence number, exact
+observed PR commit SHA, state (CLAIMED, DONE, BLOCKED), optional exact
+repository commit URL as evidence (for DONE only), and a SHA-256 chain
+link. A duplicate CLAIM returns ALREADY_CLAIMED with no new event.
+A completed task returns ALREADY_DONE; a conflicting evidence URL is
+HOLD_CONFLICT. A crash after CLAIM leaves the claim active until reviewed:
+**there is no automatic timeout, lease takeover, or restart of code work.**
+
+The first ledger record explicitly imports the preexisting FND-009A
+draft-code commit b2bf62645528b1fa880cb1238a08064f27b9d638 as
+*reviewable code*, not an independently verified CI or Safety success.
+Further tasks need a CLAIM before COMPLETE; FND-009C cannot be claimed
+until FND-009B is recorded DONE.
+
+### Operator/scheduled assistant protocol
+
+1. Read current live PR #32 HEAD, P0 #21 and Issue #31, worklist JSON
+   **and** ledger JSON through the connected GitHub tool.
+2. Validate the ledger hash chain, compare its latest task statuses
+   with the worklist, and select the first eligible task. If either file
+   changed, is missing or fails validation: HOLD; don't recreate it.
+3. For a READY unclaimed task, append exactly one CLAIMED event,
+   then update the ledger through GitHub's **contents API using the exact
+   current blob SHA** (update_file / compare-and-swap). If another writer
+   updated the file, **stop, refetch and reconcile; never overwrite**.
+   Record the resulting commit SHA and independently read back the blob.
+4. Make only a bounded human-reviewable change on the same draft branch.
+   Never execute unknown model output or perform a deployment.
+5. Append DONE with a real exact-repository commit URL, again using the
+   latest ledger blob SHA. Update automation_worklist.json to DONE and
+   the **same evidence URL**, again conditional on its blob SHA. **These
+   are not an atomic two-file transaction.** If interrupted between them,
+   the next scheduler must STOP on HOLD_SYNC and ask for reconciliation
+   against GitHub history, not rerun the work.
+6. If a task already says CLAIMED or DONE, do **not** perform it again.
+   Existing CLAIMED with unknown outcome requires human examination.
+   BLOCKED also stops the queue. Preserve all prior events.
+7. Start the next ready task only after re-reading both files and
+   confirming consistency against the actual GitHub branch.
+
+### Offline reproducibility
+
+The --output option creates a *new local file only*. It cannot push to
+GitHub. The --ledger and --output paths must be different.
+
+    python -m unittest -v tests.test_automation_ledger
+
+    python -m foundry.automation_ledger \
+      --ledger foundry/automation_ledger.json \
+      --task-id FND-009C \
+      --action CLAIM \
+      --observed-sha <CURRENT_PR32_COMMIT_SHA> \
+      --output /tmp/next-foundry-ledger.json
+
+An offline CLAIM proposal **is not execution permission**. The scheduling
+assistant must independently verify the GitHub HEAD and blob SHA and
+use connected GitHub capabilities explicitly to store any authorized
+draft-only changes. If no persistent per-blob conditional update is
+available, stop instead of claiming durable idempotency.
+
+### Trust and limitations
+
+The hash chain detects accidental editing of an event or dropped prefix
+*relative to a previously saved head*. Because both code and JSON live
+in a mutable draft PR and main is not independently protected, anyone
+able to rewrite the whole chain can forge it. SHA-256 is **not a signature**;
+a commit URL is **not** evidence of Safety/Quality acceptance. The record
+does not authenticate the worker, its commands, owner identity, GitHub CI
+observations, or the correctness of an engineering change. CLAIMED,
+DONE, CONSISTENT_ADVISORY and PASS never grant launch, GitHub write,
+Docker, model invocation, merge or production privileges. P0 #21 and the
+Foundry Launch Gate remain blocked.
+
+In particular, a scheduled task configured to read/write GitHub is
+**not a demonstrated independent trusted controller**. Its first real
+unattended run and cross-run persistence remain to be observed. The
+scheduler must not assume this description alone constitutes successful
+autonomous execution.
