@@ -15,7 +15,7 @@ _TEST = "/work/quality_probe.py"
 _MAX_SECONDS = 15
 
 
-def plan(image, fixture_path, time_seconds=10):
+def plan(image, fixture_path, time_seconds=10, probe="quality"):
     locked = {
         "state": "NOT_CONFIGURED",
         "image": None,
@@ -34,12 +34,17 @@ def plan(image, fixture_path, time_seconds=10):
         return dict(locked, state="BLOCKED", reason="Exact allowlisted image digest required")
     if type(time_seconds) is not int or not 1 <= time_seconds <= _MAX_SECONDS:
         return dict(locked, state="BLOCKED", reason="Invalid bounded time budget")
+    if probe not in ("quality", "confinement"):
+        return dict(locked, state="BLOCKED", reason="Only reviewed synthetic probes permitted")
     root = Path(fixture_path)
     try:
         if not root.is_absolute() or root.is_symlink() or not root.is_dir():
             return dict(locked, state="BLOCKED", reason="Absolute nonsymlink work directory required")
+        checks = ("calculator.py", "quality_probe.py")
+        if probe == "confinement":
+            checks += ("sandbox_runtime_probe.py",)
         if any(not (root / x).is_file() or (root / x).is_symlink()
-               for x in ("calculator.py", "quality_probe.py")):
+               for x in checks):
             return dict(locked, state="BLOCKED", reason="Missing reviewed fixture files")
         # Check if any ancestor is a symlink; bind-mount must not follow an
         # attacker-controlled symlink on the host.
@@ -58,7 +63,8 @@ def plan(image, fixture_path, time_seconds=10):
         "--cpus=0.5", "--user=65534:65534",
         "--workdir=/work", "--tmpfs=/tmp:rw,noexec,nosuid,size=8m",
         "--mount=type=bind,src=" + str(root) + ",dst=/work,readonly",
-        image, "python", "-I", "-B", _TEST,
+        image, "python", "-I", "-B",
+        _TEST if probe == "quality" else "/work/sandbox_runtime_probe.py",
     ]
     return dict(
         locked, state="POLICY_PLAN_ONLY", image=image, command_argv=argv,
@@ -71,8 +77,9 @@ def main(argv=None):
     p.add_argument("--image", help="Previously verified local python:3.11-slim@sha256:<digest>")
     p.add_argument("--fixture", help="Absolute path of an isolated reviewed fixture")
     p.add_argument("--budget-seconds", type=int, default=10)
+    p.add_argument("--probe", choices=("quality", "confinement"), default="quality")
     args = p.parse_args(argv)
-    result = plan(args.image, args.fixture, args.budget_seconds)
+    result = plan(args.image, args.fixture, args.budget_seconds, args.probe)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result["state"] == "POLICY_PLAN_ONLY" else 2
 
