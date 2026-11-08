@@ -15,9 +15,12 @@ from .sandbox_smoke import smoke, _run
 
 # Never accept user-supplied flags, image commands, files, or test bodies.
 CONTROLS = (
-    ("network", "--network=none", "network_only_loopback"),
-    ("non_root", "--user=65534:65534", "non_root_uid"),
-    ("memory", "--memory=128m", "cgroup_memory_128m"),
+    ("network", ("--network=none",), "network_only_loopback"),
+    ("non_root", ("--user=65534:65534",), "non_root_uid"),
+    # Docker rejects --memory-swap without --memory before starting the guest.
+    # They are one logical resource policy and must be disabled as a PAIR
+    # to test that the guest itself detects an absent memory cgroup limit.
+    ("memory", ("--memory=128m", "--memory-swap=128m"), "cgroup_memory_128m"),
 )
 PROBES = ("calculator.py", "quality_probe.py", "sandbox_runtime_probe.py")
 EXPECTED = frozenset({
@@ -60,13 +63,13 @@ def verify_negative_controls(image, fixture, *, budget_seconds=12):
         old = {p: hashlib.sha256((root / p).read_bytes()).hexdigest()
                for p in PROBES}
         report = {}
-        for name, flag, expected_false in CONTROLS:
+        for name, guards, expected_false in CONTROLS:
             argv = policy["command_argv"]
-            if argv.count(flag) != 1:
+            if any(argv.count(guard) != 1 for guard in guards):
                 return _deny("Expected guard missing from baseline plan", report)
-            unsafe_argv = [arg for arg in argv if arg != flag]
-            if len(unsafe_argv) != len(argv) - 1:
-                return _deny("Negative mutation did not remove exactly one guard", report)
+            unsafe_argv = [arg for arg in argv if arg not in guards]
+            if len(unsafe_argv) != len(argv) - len(guards):
+                return _deny("Negative mutation did not remove exact guard set", report)
             proc = _run(unsafe_argv, budget_seconds)
             if proc.returncode == 0:
                 return _deny(name + ": removal not detected by exit status", report)
@@ -93,7 +96,7 @@ def verify_negative_controls(image, fixture, *, budget_seconds=12):
             # We never claim other checks are authoritative, but require that
             # the *specific* intentionally disabled guard is reported unsafe.
             report[name] = {
-                "removed_guard": flag,
+                "removed_guards": list(guards),
                 "detected_check": expected_false,
                 "detected_unsafe": True,
                 "guest_exit_nonzero": True,
