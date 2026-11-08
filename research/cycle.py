@@ -15,6 +15,10 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from research.probes_extended import (
+    probe_r01, probe_r02, probe_r04, probe_r05, probe_r06, probe_r08, probe_r09,
+    probe_p0_negative_control,
+)
 
 TRACKS = [(f"R{i:02d}", i + 6) for i in range(1, 11)] + [
     ("TASK-001", 2), ("TASK-002", 3), ("TASK-003", 4)
@@ -147,7 +151,19 @@ def probe_metamorphic_sql(seed):
         db.close()
 
 
-PROBES = {"R03": probe_dynamic_index, "R07": probe_sqlite_crash, "R10": probe_metamorphic_sql}
+PROBES = {
+    "R01": probe_r01,
+    "R02": probe_r02,
+    "R03": probe_dynamic_index,
+    "R04": probe_r04,
+    "R05": probe_r05,
+    "R06": probe_r06,
+    "R07": probe_sqlite_crash,
+    "R08": probe_r08,
+    "R09": probe_r09,
+    "R10": probe_metamorphic_sql,
+}
+MODEL_TRACKS = {"R04", "R05", "R09"}
 
 
 def run_cycle(seed):
@@ -166,7 +182,9 @@ def run_cycle(seed):
         try:
             detail = probe(local_seed)
             results.append({
-                "track": track, "issue": issue, "status": "SQLITE_SMOKE_PASS",
+                "track": track, "issue": issue, "status": (
+                    "MODEL_SMOKE_PASS" if track in MODEL_TRACKS else "SQLITE_SMOKE_PASS"
+                ),
                 "seed": local_seed, "elapsed_s": round(time.perf_counter() - t0, 6),
                 **detail
             })
@@ -176,6 +194,14 @@ def run_cycle(seed):
                 "seed": local_seed, "elapsed_s": round(time.perf_counter() - t0, 6),
                 "error": "%s: %s" % (type(exc).__name__, exc)
             })
+    try:
+        control = probe_p0_negative_control(seed + 50051)
+        negative_controls = [{"name": "P0_FORGED_OR_BYPASSED_CAPTURE",
+                              "status": "EXPECTED_COUNTEREXAMPLE", **control}]
+    except Exception as exc:
+        negative_controls = [{"name": "P0_FORGED_OR_BYPASSED_CAPTURE",
+                              "status": "FAIL",
+                              "error": "%s: %s" % (type(exc).__name__, exc)}]
     return {
         "start_utc": started.isoformat(),
         "seed": seed,
@@ -183,8 +209,9 @@ def run_cycle(seed):
         "python": sys.version.split()[0],
         "sqlite": sqlite3.sqlite_version,
         "platform": platform.platform(),
-        "disclaimer": "All probes are SQLite/Python smoke tests, not autonomous AI research and not an OpDB engine",
-        "results": results
+        "disclaimer": "All probes are SQLite/Python/model smoke tests; P0 deliberately demonstrates an unsafe unprotected Lens; no autonomous AI agents or production OpDB engine are exercised",
+        "results": results,
+        "negative_controls": negative_controls
     }
 
 
@@ -212,12 +239,21 @@ def main():
         details = item.get("scope", item.get("reason", item.get("error", "")))
         rows.append("| [%s](https://github.com/mel2003ru-code/OpDB/issues/%d) | %s | %s |" %
                     (item["track"], item["issue"], item["status"], details.replace("|", "\\|")))
+    rows.extend(["", "### Mandatory negative control (unsafe implementation)",
+                 ""])
+    for control in report["negative_controls"]:
+        rows.append("- %s: **%s** — %s" % (
+            control["name"], control["status"],
+            control.get("scope", control.get("error", ""))
+        ))
+    rows.append("A detected stale result is an EXPECTED counterexample, NOT a passing safety property of OpDB.")
     summary = "\n".join(rows) + "\n"
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
             handle.write(summary)
-    if any(item["status"] == "FAIL" for item in report["results"]):
+    if (any(item["status"] == "FAIL" for item in report["results"])
+            or any(item["status"] == "FAIL" for item in report["negative_controls"])):
         return 1
     return 0
 
