@@ -1,0 +1,85 @@
+name: Foundry Sandbox — actual fixed probe, no untrusted code
+
+on:
+  pull_request:
+    paths:
+      - 'foundry/sandbox*.py'
+      - 'foundry/fixtures/sandbox_runtime_probe.py'
+      - 'tests/test_sandbox_smoke.py'
+      - 'tests/test_sandbox_policy.py'
+      - '.github/workflows/foundry-sandbox-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-runtime-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout candidate code without stored GitHub credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python test runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate safe planning and synthetic failure guards
+        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_smoke
+      - name: Confirm disposable Docker daemon available
+        shell: bash
+        run: |
+          docker version --format '{{.Server.Version}}'
+          docker info --format '{{.OSType}}/{{.Architecture}}'
+      - name: Fetch research image (resolved digest is NOT prior owner approval)
+        shell: bash
+        run: |
+          docker pull --platform linux/amd64 python:3.11-slim
+      - name: Record exact locally resolved OCI digest for this ephemeral test
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          raw = subprocess.check_output([
+              "docker", "image", "inspect", "--format={{json .RepoDigests}}",
+              "python:3.11-slim",
+          ], text=True)
+          refs = json.loads(raw.strip())
+          digests = sorted({ref.rsplit("@sha256:", 1)[1]
+                            for ref in refs
+                            if isinstance(ref, str) and "@sha256:" in ref})
+          if len(digests) != 1 or len(digests[0]) != 64:
+              raise SystemExit("Cannot uniquely pin locally fetched image")
+          image = "python:3.11-slim@sha256:" + digests[0]
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write("OPDB_TEST_IMAGE=" + image + "\n")
+          print("Research-only image resolved from local store:", image)
+          PY
+      - name: Execute ONLY fixed reviewed confinement fixture in a real container
+        shell: bash
+        run: |
+          python -m foundry.sandbox_smoke \
+            --image "$OPDB_TEST_IMAGE" \
+            --fixture "$GITHUB_WORKSPACE/foundry/fixtures" \
+            --output fixed-sandbox-evidence.json
+          python - <<'PY'
+          import json
+          with open("fixed-sandbox-evidence.json", encoding="utf-8") as stream:
+              report = json.load(stream)
+          assert report["state"] == "OBSERVED_FIXED_PROBE_PASS"
+          assert report["runtime_confinement_observed"] is True
+          assert len(report["checks"]) == 11
+          assert all(value is True for value in report["checks"].values())
+          assert report["untrusted_model_code_allowed"] is False
+          assert report["candidate_executed"] is False
+          assert report["github_write_allowed"] is False
+          assert report["production_allowed"] is False
+          assert report["automatic_merge_allowed"] is False
+          assert report["launch_authorized"] is False
+          PY
+      - name: Confirm source checkout remains unmodified
+        run: git diff --exit-code
+      - name: Declare exact evidence boundary
+        run: echo "Observed fixed synthetic Docker probe only. Pinned-at-runtime research image NOT independently supply-chain approved. No LLM, arbitrary patches, real agent sandbox attestation, production, merge or launch."
