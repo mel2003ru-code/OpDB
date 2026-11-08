@@ -74,16 +74,20 @@ def inspect():
     }
     results.update(_cgroups())
     results.update(_proc_status())
-    # Real network attempt (no DNS) is an additional negative control; no
-    # response from the remote address is expected or necessary.
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.2)
-            results["outbound_tcp_denied"] = sock.connect_ex(
-                ("1.1.1.1", 443)
-            ) != 0
-    except OSError:
-        results["outbound_tcp_denied"] = True
+    # Only probe outbound TCP while the namespace appears loopback-only.
+    # The NEGATIVE CONTROL deliberately removes --network=none; when eth0
+    # appears, fail closed WITHOUT contacting any outside host.
+    if not results["network_only_loopback"]:
+        results["outbound_tcp_denied"] = False
+    else:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.2)
+                results["outbound_tcp_denied"] = sock.connect_ex(
+                    ("1.1.1.1", 443)
+                ) != 0
+        except OSError:
+            results["outbound_tcp_denied"] = True
     # Read-only bind is checked by mount flags, not just write-permission
     # errors that could also be produced by our unprivileged uid.
     return results
