@@ -9,6 +9,7 @@ on:
       - 'tests/test_sandbox_policy.py'
       - 'tests/test_sandbox_negative.py'
       - 'tests/test_sandbox_adversarial.py'
+      - 'tests/test_sandbox_runner.py'
       - '.github/workflows/foundry-sandbox-smoke.yml'
   workflow_dispatch:
 
@@ -144,6 +145,27 @@ jobs:
           assert r["production_allowed"] is False
           assert r["launch_authorized"] is False
           print("EXPECTED_FIXED_DENIALS: fake-secret and disabled-seccomp detected")
+          PY
+      - name: Re-verify bounded Docker driver and cleanup controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_sandbox_runner
+          python -m foundry.sandbox_runner --probe confinement --output runner-confinement.json
+          python -m foundry.sandbox_runner --probe adversarial --output runner-adversarial.json
+          python - <<'PY'
+          import json
+          for probe in ("confinement", "adversarial"):
+              with open("runner-"+probe+".json", encoding="utf-8") as stream:
+                  report=json.load(stream)
+              assert report["state"]=="REVIEWED_PROBE_PASS", report
+              assert report["probe"]==probe
+              assert all(report["observed"].values())
+              assert not report["agent_sandbox_attested"]
+              assert not report["candidate_executed"]
+              assert not report["github_write_allowed"]
+              assert not report["production_allowed"]
+              assert not report["launch_authorized"]
           PY
       - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
         if: always()
