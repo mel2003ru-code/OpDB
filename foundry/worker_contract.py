@@ -21,6 +21,10 @@ _MAX_MESSAGE = 16 * 1024
 _MAX_CODE = 4096
 _FIXED_BEFORE = "    return left - right\n"
 _FIXED_AFTER = "    return left + right\n"
+_CONTROLLER_CHECKOUT = Path(__file__).resolve().parents[1]
+_REVIEWED_SOURCE_SHA256 = (
+    "97ecad52211a40a7ebf00716cc9ee9c2f76a9b4a5eda731afe2921221f3e7452"
+)
 _REQUEST_KEYS = frozenset({
     "schema_version", "source_sha", "task_key", "issue_number",
     "operation", "allowed_path", "max_candidate_bytes", "max_attempts",
@@ -99,10 +103,22 @@ def _valid_request(request, checkout_sha):
     )
 
 
+def _authoritative_checkout(checkout_root):
+    root = Path(checkout_root)
+    try:
+        return (root.is_dir() and not root.is_symlink()
+                and root.resolve() == _CONTROLLER_CHECKOUT
+                and not any(parent.is_symlink() for parent in root.parents))
+    except OSError:
+        return False
+
+
 def mock_reply(request, checkout_sha, checkout_root):
     """Zero-cost deterministic fixture reply. Never execute source content."""
     if not _valid_request(request, checkout_sha):
         return None, "Request contents not approved by controller"
+    if not _authoritative_checkout(checkout_root):
+        return None, "Checkout is not the controller's reviewed source tree"
     # Fixed relative file only; caller/worker cannot select another path.
     source = Path(checkout_root) / _PATH
     try:
@@ -116,7 +132,8 @@ def mock_reply(request, checkout_sha, checkout_root):
         old = raw.decode("utf-8", "strict")
     except (OSError, UnicodeError):
         return None, "Fixture unavailable or invalid"
-    if old.count(_FIXED_BEFORE) != 1 or _FIXED_AFTER in old:
+    if (hashlib.sha256(raw).hexdigest() != _REVIEWED_SOURCE_SHA256
+            or old.count(_FIXED_BEFORE) != 1 or _FIXED_AFTER in old):
         return None, "Reviewed synthetic arithmetic fixture changed"
     changed = old.replace(_FIXED_BEFORE, _FIXED_AFTER)
     reply = {
@@ -136,6 +153,11 @@ def review(request, reply, checkout_sha, checkout_root):
     """Controller *quarantines*, never executes or applies a worker response."""
     if not _valid_request(request, checkout_sha):
         return _block("Worker request changed or source SHA mismatch")
+    if not _authoritative_checkout(checkout_root):
+        return _block("Checkout is not the controller's reviewed source tree")
+    if (type(reply) is not dict
+            or reply.get("original_sha256") != _REVIEWED_SOURCE_SHA256):
+        return _block("Untrusted worker reply refers to unreviewed source bytes")
     result = admit_patch(reply, checkout_sha, checkout_root)
     if result["state"] != "QUARANTINED_FOR_REVIEW":
         return _block("Untrusted worker reply rejected: " +
@@ -162,7 +184,15 @@ def _load(path):
         raw = f.read(_MAX_MESSAGE + 1)
     if len(raw) > _MAX_MESSAGE:
         raise ValueError("Handoff message exceeds 16 KiB")
-    return json.loads(raw.decode("utf-8", "strict"))
+    def reject_duplicate_keys(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate JSON field: " + key)
+            result[key] = value
+        return result
+    return json.loads(raw.decode("utf-8", "strict"),
+                      object_pairs_hook=reject_duplicate_keys)
 
 
 def main(argv=None):
