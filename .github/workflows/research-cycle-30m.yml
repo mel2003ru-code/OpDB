@@ -74,6 +74,9 @@ jobs:
               '| ['+x.track+'](https://github.com/'+owner+'/'+repo+'/issues/'+x.issue+') | '+
               x.status+' | '+(x.assertions ?? '—')+' | '+String(x.scope || x.reason || x.error || '—').replaceAll('|','/').replaceAll('\n',' ')+' |'
             );
+            const negative = report.negative_controls || [];
+            const negativeRows = negative.map(x=>"- **"+x.status+"** — "+
+              String(x.scope || x.error || "No evidence").replaceAll("\n"," ").replaceAll("|","/"));
             const text = [
               marker,
               '# ⏱ OpDB — последнее исследование за '+day+' (UTC)',
@@ -91,6 +94,13 @@ jobs:
               'Статус SQLITE_SMOKE_PASS/MODEL_SMOKE_PASS не означает доказанную корректность OpDB,',
               'отсутствие багов, ACID, промышленную отказоустойчивость или выигрыш в скорости.',
               'NOT_CONFIGURED — проверяемого модуля данного направления пока нет.',
+              '',
+              '### Обязательный отрицательный P0-контроль',
+              '',
+              ...(negativeRows.length ? negativeRows : ['- **NOT VERIFIED** — контроль не запускался.']),
+              '',
+              'EXPECTED_COUNTEREXAMPLE означает обнаруженную ошибку в намеренно небезопасной модели,',
+              'а не проверенную защиту OpDB. Issue #21 остаётся блокирующим.',
               '',
               'Полный машиночитаемый JSON находится в журнале этого запуска GitHub Actions; ',
               'в Actions storage ничего не загружается из-за исчерпанной квоты.',
