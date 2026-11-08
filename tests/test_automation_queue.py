@@ -15,6 +15,10 @@ PROOF = "https://github.com/mel2003ru-code/OpDB/pull/32"
 class AutomationQueueTests(unittest.TestCase):
     def setUp(self):
         self.queue = json.loads(SOURCE.read_text(encoding="utf-8"))
+        # Real queue evolves between scheduled iterations; tests use a stable
+        # READY baseline, never hardcode the live progress state.
+        for item in self.queue["items"]:
+            item.update(status="READY", evidence_url=None)
 
     def test_live_review_only_queue_starts_at_first_task(self):
         result = next_step(self.queue, current_sha=SHA, ci_state="NO_RUNNER")
@@ -82,7 +86,9 @@ class AutomationQueueTests(unittest.TestCase):
     def test_cli_plan_has_no_execution_or_write_authority(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "plan.json"
-            code = main(["--queue", str(SOURCE), "--expected-sha", SHA,
+            source = Path(tmp) / "queue.json"
+            source.write_text(json.dumps(self.queue), encoding="utf-8")
+            code = main(["--queue", str(source), "--expected-sha", SHA,
                          "--ci-state", "NO_RUNNER", "--output", str(out)])
             self.assertEqual(code, 0)
             result = json.loads(out.read_text(encoding="utf-8"))
