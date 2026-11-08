@@ -188,6 +188,51 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
                             "Container cleanup must run on failure")
             self.assert_blocked(result)
 
+    def test_output_limit_rejects_bounded_synthetic_stdout_flood(self):
+        """Even fixed probes must not let Docker CLI fill unbounded host RAM."""
+        import sys
+        from foundry.sandbox_runner import _run
+        with patch("foundry.sandbox_runner.DOCKER", sys.executable):
+            with self.assertRaisesRegex(RuntimeError, "output.*limit|output.*budget"):
+                _run([
+                    sys.executable, "-c",
+                    "import sys; sys.stdout.write('Z' * (128 * 1024))"
+                ], timeout=5)
+
+    def test_container_cleanup_error_blocks_success_evidence(self):
+        """Do not report success when docker rm -f returns nonzero."""
+        def failed_cleanup(args, *, timeout):
+            if args[1:3] == [ "rm", "-f" ]:
+                return completed(1, stderr="daemon refused cleanup")
+            if "inspect" in args:
+                return completed(stdout="sha256:" + "a" * 64 + "\\n")
+            if "run" in args:
+                return valid_observation("confinement")
+            raise AssertionError("unexpected Docker operation")
+        with (patch("foundry.sandbox_runner._docker_available", return_value=True),
+              patch("foundry.sandbox_runner._run", side_effect=failed_cleanup)):
+            result = run_probe("confinement")
+        self.assertEqual(result["state"], "BLOCKED",
+                         "Unverified container cleanup must block approval")
+        self.assert_blocked(result)
+
+    def test_container_cleanup_timeout_blocks_success_evidence(self):
+        """A timed-out cleanup is not proof that the container was removed."""
+        def timeout_cleanup(args, *, timeout):
+            if args[1:3] == ["rm", "-f"]:
+                raise subprocess.TimeoutExpired(args, timeout)
+            if "inspect" in args:
+                return completed(stdout="sha256:" + "a" * 64 + "\\n")
+            if "run" in args:
+                return valid_observation("adversarial")
+            raise AssertionError("unexpected Docker operation")
+        with (patch("foundry.sandbox_runner._docker_available", return_value=True),
+              patch("foundry.sandbox_runner._run", side_effect=timeout_cleanup)):
+            result = run_probe("adversarial")
+        self.assertEqual(result["state"], "BLOCKED",
+                         "Timed-out cleanup must not yield success")
+        self.assert_blocked(result)
+
     def test_main_blocks_unavailable_runtime_without_running_docker(self):
         with patch("foundry.sandbox_runner._docker_available", return_value=False):
             with contextlib.redirect_stdout(io.StringIO()) as out:
