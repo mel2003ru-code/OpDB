@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+from itertools import islice
 from pathlib import Path
 import sqlite3
 import threading
@@ -17,6 +18,7 @@ from typing import Iterable, Literal
 MAX_KEY_UTF8 = 512
 MAX_VALUE_BYTES = 1024 * 1024
 MAX_BATCH = 10000
+MAX_BATCH_BYTES = 8 * 1024 * 1024
 MAX_SCAN = 1000
 
 @dataclass(frozen=True)
@@ -124,19 +126,26 @@ class TruthStore:
         Accepted operations: ("put", key, bytes), ("delete", key).
         Validate all arguments before a transaction to avoid partial effects.
         """
-        actions = list(operations)
+        actions = list(islice(iter(operations), MAX_BATCH + 1))
         if len(actions) > MAX_BATCH:
             raise ValueError("batch exceeds 10000 operations")
         checked = []
+        total_bytes = 0
         for item in actions:
             if not isinstance(item, tuple) or not item:
                 raise ValueError("invalid operation")
             if len(item) == 3 and item[0] == "put":
-                checked.append(("put", _key(item[1]), _value(item[2])))
+                key, value = _key(item[1]), _value(item[2])
+                total_bytes += len(key.encode("utf-8")) + len(value)
+                checked.append(("put", key, value))
             elif len(item) == 2 and item[0] == "delete":
-                checked.append(("delete", _key(item[1])))
+                key = _key(item[1])
+                total_bytes += len(key.encode("utf-8"))
+                checked.append(("delete", key))
             else:
                 raise ValueError("invalid operation")
+            if total_bytes > MAX_BATCH_BYTES:
+                raise ValueError("batch exceeds 8 MiB of key and value payload")
         with self._lock:
             self._ensure_open()
             self._db.execute("BEGIN IMMEDIATE")
