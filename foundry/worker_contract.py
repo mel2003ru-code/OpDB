@@ -90,7 +90,13 @@ def _valid_request(request, checkout_sha):
     if (type(checkout_sha) is not str or _SHA.fullmatch(checkout_sha) is None
             or type(request) is not dict or set(request) != _REQUEST_KEYS):
         return False
-    return request == _request_for(checkout_sha)
+    expected = _request_for(checkout_sha)
+    # Python bool is an int subclass: True == 1 and 0 == False, so a plain
+    # dict equality is NOT a schema/type check on untrusted JSON.
+    return all(
+        type(request[key]) is type(value) and request[key] == value
+        for key, value in expected.items()
+    )
 
 
 def mock_reply(request, checkout_sha, checkout_root):
