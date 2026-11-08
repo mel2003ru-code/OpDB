@@ -1,0 +1,107 @@
+name: OpDB Foundry daily status
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '13 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: opdb-foundry-daily-status
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: github.repository == 'mel2003ru-code/OpDB'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Summarize 13 workstreams and post to Issue 17
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tasks = [
+              ["R01",7],["R02",8],["R03",9],["R04",10],["R05",11],
+              ["R06",12],["R07",13],["R08",14],["R09",15],["R10",16],
+              ["TASK-001 Safety",2],["TASK-002 Core",3],["TASK-003 Quality",4],
+              ["TASK-004 Integration",5]
+            ];
+            const allIssues = (await github.paginate(github.rest.issues.listForRepo,
+              {owner, repo, state:"all", per_page:100})).filter(i=>!i.pull_request);
+            const issueByNumber = new Map(allIssues.map(i=>[i.number,i]));
+            for (const [label,number] of tasks) {
+              if (!issueByNumber.has(number)) throw new Error("Missing required issue #"+number);
+            }
+            const pull = await github.rest.pulls.list({owner,repo,state:"open",per_page:100});
+            const prs = pull.data;
+            const workflow = await github.rest.actions.listWorkflowRunsForRepo({owner,repo,per_page:30});
+            const runs = workflow.data.workflow_runs || [];
+            const day = new Date().toISOString().slice(0,10);
+            const marker = "<!-- opdb-daily-status:" + day + " -->";
+            const since = Date.now() - 24*60*60*1000;
+            const issueRows = tasks.map(([label,number]) => {
+              const item = issueByNumber.get(number);
+              const recentlyUpdated = Date.parse(item.updated_at) >= since;
+              return "| ["+label+"]("+item.html_url+") | " +
+                (item.state === "open" ? "OPEN" : "CLOSED") + " | " +
+                (recentlyUpdated ? "обновление за 24 ч" : "нет изменений в GitHub за 24 ч") + " |";
+            });
+            const openPrs = prs.slice(0,25).map(p=>"- [#"+p.number+" "+p.title+"]("+p.html_url+")"+
+              (p.draft ? " — черновик" : " — ожидает ревью"));
+            const failures = runs.filter(r=>["failure","timed_out","action_required"].includes(r.conclusion));
+            const pending = runs.filter(r=>r.status!=="completed");
+            const ciText = failures.length
+              ? failures.slice(0,12).map(r=>"- "+r.name+" — "+r.conclusion+" ([проверка]("+r.html_url+"))")
+              : ["- В последних 30 полученных запусках нет зафиксированного завершения с ошибкой."];
+            if (pending.length) ciText.push("- Незавершённые запуски: "+pending.length+" (результат не подтверждён).");
+            const lines = [
+              marker,
+              "# 🔬 OpDB Foundry — отчёт "+day+" (UTC)",
+              "",
+              "Источники: [GitHub Issues](https://github.com/"+owner+"/"+repo+"/issues), "+
+              "[Pull Requests](https://github.com/"+owner+"/"+repo+"/pulls), "+
+              "[GitHub Actions](https://github.com/"+owner+"/"+repo+"/actions).",
+              "",
+              "### Исследования R01–R10 и инженерные направления",
+              "",
+              "| Направление | Задача | Изменение |",
+              "|---|---|---|",
+              ...issueRows,
+              "",
+              "### Открытые PR",
+              "",
+              ...(openPrs.length ? openPrs : ["- Нет открытых PR."]),
+              "",
+              "### CI — ошибки и ожидание",
+              "",
+              ...ciText,
+              "",
+              "**Важное ограничение:** OPEN не означает отсутствие работы, CLOSED не доказывает PASS. "+
+              "Изменение GitHub Issue не доказывает выполнение научного эксперимента. "+
+              "Прогресс отдельных ChatGPT-чатов недоступен без опубликованных коммитов, PR или отчётов.",
+              "",
+              "Проверки метаданных не подтверждают ACID, надёжность WAL, отсутствие stale Lens или ускорение OpDB. "+
+              "Автоматического слияния, изменения исходников, деплоя и работы с производственными данными нет.",
+              ""
+            ];
+            const markdown = lines.join("\n");
+            await core.summary.addRaw(markdown).write();
+            const comments = await github.paginate(github.rest.issues.listComments,
+              {owner,repo,issue_number:17,per_page:100});
+            const existing = comments.find(c=>c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({owner,repo,comment_id:existing.id,body:markdown});
+              core.info("Updated today's status comment on #17");
+            } else {
+              await github.rest.issues.createComment({owner,repo,issue_number:17,body:markdown});
+              core.info("Published today's status comment on #17");
+            }
