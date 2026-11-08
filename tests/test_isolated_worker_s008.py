@@ -3,7 +3,9 @@
 These are host-side tests with a stubbed Docker CLI, not OS attestation.
 Real Docker must be checked separately in Actions.
 """
+import hashlib
 import json
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -21,7 +23,8 @@ def completed(code=0, stdout=""):
 
 
 def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=False,
-                bad_check=False, fake_launch=False, duplicate_json=False):
+                bad_check=False, fake_launch=False, duplicate_json=False,
+                replayed_nonce=False, forged_digest=False, omit_nonce=False):
     reply, error = mock_reply(_request_for(SHA), SHA, _CONTROLLER_CHECKOUT)
     assert error is None, error
     report = {
@@ -45,6 +48,15 @@ def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=F
         if argv[1:3] == [ "image", "inspect" ]:
             return completed(stdout="sha256:" + "b" * 64 + "\n")
         if argv[1] == "run":
+            envvals = {item.split("=", 2)[1].split("=", 1)[0]:
+                       item.split("=", 2)[2]
+                       for item in argv if item.startswith("--env=")}
+            report["session_nonce"] = (
+                "0" * 32 if replayed_nonce else envvals.get("OPDB_SESSION_NONCE"))
+            report["request_sha256"] = (
+                "f" * 64 if forged_digest else envvals.get("OPDB_REQUEST_SHA256"))
+            if omit_nonce:
+                report.pop("session_nonce")
             if simulate_timeout:
                 raise subprocess.TimeoutExpired(argv, 3)
             return completed(exit_code, "{garbage" if bad_json else
@@ -134,6 +146,45 @@ class IsolatedWorkerS008Tests(unittest.TestCase):
             with patch("foundry.isolated_worker._docker_available",
                        side_effect=AssertionError("must reject before Docker")):
                 self.blocked(run_isolated_handoff(_request_for(SHA),sha,root))
+
+    def test_fresh_session_nonce_and_request_digest_bound_to_guest(self):
+        fn,calls = stub_docker()
+        with (patch("foundry.isolated_worker._docker_available", return_value=True),
+              patch("foundry.isolated_worker._run", side_effect=fn)):
+            result = run_isolated_handoff(_request_for(SHA), SHA, _CONTROLLER_CHECKOUT)
+        self.assertEqual(result["state"], "ISOLATED_REVIEW_ONLY", result)
+        cmd = next(x for x in calls if len(x)>1 and x[1]=="run")
+        nonce = next(x[len("--env=OPDB_SESSION_NONCE="):]
+                     for x in cmd if x.startswith("--env=OPDB_SESSION_NONCE="))
+        digest = next(x[len("--env=OPDB_REQUEST_SHA256="):]
+                      for x in cmd if x.startswith("--env=OPDB_REQUEST_SHA256="))
+        self.assertRegex(nonce, r"\\A[0-9a-f]{32}\\Z")
+        expected = hashlib.sha256(json.dumps(
+            _request_for(SHA), sort_keys=True, separators=(",", ":")
+        ).encode("ascii")).hexdigest()
+        self.assertEqual(digest, expected)
+
+    def test_old_nonce_forged_request_digest_and_missing_field_fail_closed(self):
+        for kwargs in ({"replayed_nonce":True}, {"forged_digest":True},
+                       {"omit_nonce":True}):
+            fn,_ = stub_docker(**kwargs)
+            with (self.subTest(kwargs=kwargs),
+                  patch("foundry.isolated_worker._docker_available",return_value=True),
+                  patch("foundry.isolated_worker._run",side_effect=fn)):
+                self.blocked(run_isolated_handoff(
+                    _request_for(SHA), SHA, _CONTROLLER_CHECKOUT))
+
+    def test_same_request_gets_distinct_one_use_nonces(self):
+        issued=[]
+        for _ in range(2):
+            fn,calls = stub_docker()
+            with (patch("foundry.isolated_worker._docker_available",return_value=True),
+                  patch("foundry.isolated_worker._run",side_effect=fn)):
+                result=run_isolated_handoff(_request_for(SHA),SHA,_CONTROLLER_CHECKOUT)
+            self.assertEqual(result["state"],"ISOLATED_REVIEW_ONLY",result)
+            cmd=next(x for x in calls if len(x)>1 and x[1]=="run")
+            issued.append(next(x for x in cmd if x.startswith("--env=OPDB_SESSION_NONCE=")))
+        self.assertNotEqual(issued[0],issued[1])
 
 
 if __name__ == "__main__":
