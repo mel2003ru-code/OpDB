@@ -42,3 +42,37 @@ jobs:
           else
             echo "No machine-readable result was generated"
           fi
+  notify-failure:
+    if: ${{ always() && needs.reproducible-checks.result == 'failure' }}
+    needs: reproducible-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Alert once per day in Issue 17
+        uses: actions/github-script@v7
+        with:
+          retries: 2
+          script: |
+            const {owner,repo} = context.repo;
+            const utcDay = new Date().toISOString().slice(0,10);
+            const marker = "<!-- opdb-research-alert:" + utcDay + " -->";
+            const runUrl = "https://github.com/"+owner+"/"+repo+"/actions/runs/"+context.runId;
+            const comments = await github.paginate(github.rest.issues.listComments,
+              {owner,repo,issue_number:17,per_page:100});
+            const old = comments.find(x=>x.body?.includes(marker));
+            const known = new Set((old?.body||"").match(/https:\/\/github\.com\/[^\s)]+\/actions\/runs\/\d+/g)||[]);
+            known.add(runUrl);
+            const urls = [...known].slice(-12);
+            const msg = [marker, "## OpDB research checks — CI failures ("+utcDay+" UTC)",
+              "", "A scheduled SQLite/model test failed. This does not mean a native OpDB",
+              "database regression until reproduced on the relevant engine code.",
+              "", ...urls.map(x=>"- [Inspect failing run]("+x+")"),
+              "", "Do not merge safety-critical changes based solely on green metadata CI."].join("\n");
+            if (old) {
+              await github.rest.issues.updateComment({owner,repo,comment_id:old.id,body:msg});
+            } else {
+              await github.rest.issues.createComment({owner,repo,issue_number:17,body:msg});
+            }
