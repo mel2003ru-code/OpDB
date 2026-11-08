@@ -14,6 +14,7 @@ on:
       - 'tests/test_worker_contract.py'
       - 'tests/test_isolated_worker_s008.py'
       - 'tests/test_s008b2_protocol.py'
+      - 'tests/test_automation_queue.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -35,7 +36,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy tests.test_model_gate tests.test_worker_contract tests.test_isolated_worker_s008 tests.test_s008b2_protocol
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy tests.test_model_gate tests.test_worker_contract tests.test_isolated_worker_s008 tests.test_s008b2_protocol tests.test_automation_queue
       - name: Verify agent model policy rejects every paid inference path
         shell: bash
         run: |
