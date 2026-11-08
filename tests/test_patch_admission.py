@@ -195,6 +195,15 @@ class PatchQuarantineTests(unittest.TestCase):
             self.assertIn("16 KiB", response["reasons"][0])
             self.assert_readonly(response)
 
+    def test_source_reference_must_use_bounded_reader(self):
+        """Even a matching path can be unexpectedly large: never read_bytes()."""
+        item = valid()
+        with patch("foundry.patch_admission.Path.read_bytes",
+                   side_effect=AssertionError("unbounded source read")):
+            result = admit(item, SHA, ROOT)
+        self.assertEqual(result["state"], "QUARANTINED_FOR_REVIEW")
+        self.assert_readonly(result)
+
     def test_cli_bad_file_denied(self):
         with tempfile.TemporaryDirectory() as folder:
             with contextlib.redirect_stdout(io.StringIO()):
