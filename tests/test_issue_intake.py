@@ -111,6 +111,21 @@ class GitHubIssueIntakeTests(unittest.TestCase):
             self.assertEqual(result["state"], "DRAFT_PROPOSAL_READY")
             self.assertFalse(result["repository_modified"])
 
+    def test_cli_refuses_oversized_but_valid_github_issue_json(self):
+        """A forged huge response must not be fully read into controller RAM."""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "large-issue.json"
+            output = Path(tmp) / "task.json"
+            source.write_text(
+                json.dumps(real_shape()) + " " * (64 * 1024), encoding="utf-8"
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main([
+                    "--issue-json", str(source), "--expected-sha", SHA,
+                    "--output", str(output)
+                ]), 2, "Oversized issue must be blocked even when JSON is valid")
+            self.assertFalse(output.exists())
+
     def test_cli_refuses_non_matching_issue_without_task_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "issue.json"
