@@ -6,6 +6,7 @@ A future separately reviewed runner may consume the plan only after it verifies
 the local pinned image, container runtime and actual kernel confinement.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -16,6 +17,16 @@ _MAX_SECONDS = 15
 # Canonical reviewed-fixture root. An arbitrary caller-supplied directory with
 # lookalike filenames can contain executable Python; NEVER mount it as trusted.
 _REVIEWED_FIXTURE = Path(__file__).resolve().parent / "fixtures"
+# Fixed SHA-256 of reviewed synthetic fixtures. Any source change requires
+# updating these values in a separately reviewed PR; filename/path alone is
+# NOT sufficient to authorize Python execution.
+_REVIEWED_CONTENT_SHA256 = {
+    "calculator.py": "97ecad52211a40a7ebf00716cc9ee9c2f76a9b4a5eda731afe2921221f3e7452",
+    "quality_probe.py": "3f636ed87e607ec2f5869492336449cc313b5deaf3ccb4a9338f9e31c79347a2",
+    "sandbox_runtime_probe.py": "a0f56d4e067186e1a7f0c5babca9539f635739e3b5250948bf95bd08afd3268a",
+    "sandbox_adversarial_probe.py": "928d8d75bf9dd62ff9f27f9579edbb6fddf3a3b558d05d8b43db23206c2078ba",
+}
+_MAX_REVIEWED_BYTES = 16 * 1024
 
 
 def plan(image, fixture_path, time_seconds=10, probe="quality"):
@@ -59,6 +70,14 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         if any(not (root / x).is_file() or (root / x).is_symlink()
                for x in checks):
             return dict(locked, state="BLOCKED", reason="Missing reviewed fixture files")
+        for name in checks:
+            with (root / name).open("rb") as handle:
+                raw = handle.read(_MAX_REVIEWED_BYTES + 1)
+            if (len(raw) > _MAX_REVIEWED_BYTES
+                    or hashlib.sha256(raw).hexdigest()
+                    != _REVIEWED_CONTENT_SHA256[name]):
+                return dict(locked, state="BLOCKED",
+                            reason="Reviewed synthetic fixture content hash mismatch")
         # Check if any ancestor is a symlink; bind-mount must not follow an
         # attacker-controlled symlink on the host.
         if any(p.is_symlink() for p in (root, *root.parents)):
