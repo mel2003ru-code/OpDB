@@ -81,7 +81,10 @@ def admit(proposal, checked_out_sha, checkout_root):
         if (not root.is_dir() or not source.is_file()
                 or any(p.is_symlink() for p in (root, *root.parents, source.parent, source))):
             return _deny("Trusted synthetic fixture does not exist or traverses symlinks")
-        original_bytes = source.read_bytes()
+        with source.open("rb") as handle:
+            original_bytes = handle.read(_MAX_BYTES + 1)
+        if len(original_bytes) > _MAX_BYTES:
+            return _deny("Original fixture exceeds 4096-byte budget")
         original = original_bytes.decode("utf-8", "strict")
     except (OSError, UnicodeError):
         return _deny("Could not read the trusted fixture")
