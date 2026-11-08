@@ -16,6 +16,7 @@ _TASK = "demo-add-v1"
 _SHA40 = re.compile(r"[a-fA-F0-9]{40}\Z")
 _SHA256 = re.compile(r"[a-fA-F0-9]{64}\Z")
 _MAX_BYTES = 4096
+_MAX_PROPOSAL_JSON_BYTES = 16 * 1024
 
 
 def _deny(reason):
@@ -77,8 +78,9 @@ def admit(proposal, checked_out_sha, checkout_root):
     root = Path(checkout_root)
     source = root / _PATH
     try:
-        if not root.is_dir() or root.is_symlink() or not source.is_file() or source.is_symlink():
-            return _deny("Trusted synthetic fixture does not exist or is a symlink")
+        if (not root.is_dir() or not source.is_file()
+                or any(p.is_symlink() for p in (root, *root.parents, source.parent, source))):
+            return _deny("Trusted synthetic fixture does not exist or traverses symlinks")
         original_bytes = source.read_bytes()
         original = original_bytes.decode("utf-8", "strict")
     except (OSError, UnicodeError):
@@ -119,8 +121,13 @@ def main(argv=None):
     p.add_argument("--output")
     args = p.parse_args(argv)
     try:
-        proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
-        result = admit(proposal, args.expected_sha, args.checkout)
+        with Path(args.proposal).open("rb") as stream:
+            payload = stream.read(_MAX_PROPOSAL_JSON_BYTES + 1)
+        if len(payload) > _MAX_PROPOSAL_JSON_BYTES:
+            result = _deny("Proposal JSON exceeds 16 KiB")
+        else:
+            proposal = json.loads(payload.decode("utf-8", "strict"))
+            result = admit(proposal, args.expected_sha, args.checkout)
     except (OSError, ValueError, UnicodeError) as exc:
         result = _deny(type(exc).__name__ + ": cannot load proposal")
     serialized = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
