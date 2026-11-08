@@ -111,6 +111,29 @@ All were marked failure within seconds **with no job steps or retrievable
 logs**. Therefore they do NOT prove the expected test RED, nor a Docker
 regression. Reason for runner startup failure is not independently known.
 
+**Exact GitHub-blob local validation (not GitHub Actions):**
+`foundry/s008b2_protocol.py` blob
+`1a0541e8d24be72f0c0cb841d9be79ebdf495d72`;
+`tests/test_s008b2_protocol.py` blob
+`30ea142972fdff2a08cfbc514824e3457e4100d6`.
+A local mirror with both exact Git blob SHA values executed
+`python -m unittest -v tests.test_s008b2_protocol`: **12 tests,
+12 PASS, 0 FAIL** (synthetic Python+SQLite; no Docker, external worker,
+independent reviewer or trusted host). This proves only these test inputs
+against the current PR-controlled reference module.
+
+**Fresh GitHub Actions attempts for exact head
+`dcbe643b366bfe75e3d06ac6002cdc9b8993af8f`:**
+[full CI #42496624674](https://github.com/mel2003ru-code/OpDB/actions/runs/42496624674),
+[Foundry #42496624596](https://github.com/mel2003ru-code/OpDB/actions/runs/42496624596),
+[Docker #42496624590](https://github.com/mel2003ru-code/OpDB/actions/runs/42496624590).
+All `failure` in approximately four seconds, no runner assigned
+(`runner_id=0`, `steps=[]`, job billable duration `0 ms`).
+The test suite and actual Docker step were **not run**. Cause of failure
+at runner allocation is **unconfirmed**; do not label as RED/GREEN evidence.
+Account/runner availability, budget/billing and security policies require
+owner-side inspection if no retriable capacity becomes available.
+
 **Implementation checkpoint:** protocol `6959a8c9a9774455c2fe8e51d809642d965a4705`;
 Foundry Gate wiring `6930f339f08a430e27becac5f9fe6d169beb1d55`;
 additional concurrency/restart falsification
