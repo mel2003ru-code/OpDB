@@ -86,7 +86,7 @@ class IsolatedWorkerS008Tests(unittest.TestCase):
         cfg=plan(PINNED_IMAGE, _REVIEWED_FIXTURE, 12, probe="handoff")
         self.assertEqual(cfg["state"], "POLICY_PLAN_ONLY", cfg)
         cmd=cfg["command_argv"]
-        for flag in ("--network=none", "--read-only", "--cap-drop=ALL",
+        for flag in ("--network=none", "--read-only", "--log-driver=none", "--cap-drop=ALL",
                      "--security-opt=no-new-privileges", "--pids-limit=32",
                      "--memory=128m", "--memory-swap=128m", "--cpus=0.5",
                      "--shm-size=8m", "--pull=never", "--user=65534:65534"):
