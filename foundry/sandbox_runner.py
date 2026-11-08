@@ -9,6 +9,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import selectors
+import signal
+import time
 from pathlib import Path
 import subprocess
 import tempfile
@@ -41,6 +44,7 @@ EXPECTED_KEYS = {
     )),
 }
 MAX_EXECUTION_SECONDS = 25
+MAX_DOCKER_OUTPUT_BYTES = 64 * 1024
 
 
 def _response(state, reason, probe=None, observed=None, image_id=None):
@@ -74,15 +78,69 @@ def _docker_env():
 
 
 def _run(args, *, timeout):
-    return subprocess.run(
+    """Capture bounded Docker output without materializing an unbounded pipe.
+
+    Per-streaming 64 KiB COMBINED limit and a monotonic overall deadline. Kill
+    the CLI process GROUP on timeout/overflow so inherited pipe writers cannot
+    hold us indefinitely. This is not OS isolation of an adversarial guest.
+    """
+    started = time.monotonic()
+    process = subprocess.Popen(
         args,
         executable=DOCKER,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=timeout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
         env=_docker_env(),
+        start_new_session=True,
+        bufsize=0,
     )
+    stdout = bytearray()
+    stderr = bytearray()
+    completed = False
+    try:
+        with selectors.DefaultSelector() as poller:
+            poller.register(process.stdout, selectors.EVENT_READ, stdout)
+            poller.register(process.stderr, selectors.EVENT_READ, stderr)
+            while poller.get_map():
+                remaining = timeout - (time.monotonic() - started)
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(args, timeout)
+                events = poller.select(remaining)
+                for key, _ in events:
+                    chunk = os.read(key.fileobj.fileno(), 4096)
+                    if not chunk:
+                        poller.unregister(key.fileobj)
+                        continue
+                    if len(stdout) + len(stderr) + len(chunk) > MAX_DOCKER_OUTPUT_BYTES:
+                        raise RuntimeError("Docker output budget exceeded")
+                    key.data.extend(chunk)
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(args, timeout)
+        process.wait(timeout=remaining)
+        completed = True
+        return subprocess.CompletedProcess(
+            args,
+            process.returncode,
+            stdout.decode("utf-8", errors="replace"),
+            stderr.decode("utf-8", errors="replace"),
+        )
+    finally:
+        if not completed:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        process.stdout.close()
+        process.stderr.close()
 
 
 def _docker_available():
@@ -131,18 +189,44 @@ def run_probe(probe):
             argv[position:position] = [
                 "--name=" + name, "--cidfile=" + str(cidfile)
             ]
+            execution_problem = None
+            result = None
+            cleanup_confirmed = False
             try:
                 result = _run(argv, timeout=MAX_EXECUTION_SECONDS)
             except subprocess.TimeoutExpired:
-                return _response("BLOCKED", "Container exceeded wall-clock budget",
-                                 probe, image_id=image_id)
+                execution_problem = "Container exceeded wall-clock budget"
+            except RuntimeError:
+                execution_problem = "Container produced excessive stdout/stderr"
             finally:
-                # Separate Docker cleanup; no shell, no Docker socket exposure
-                # to the container. Never leave a timed-out guest running.
+                # --rm may already have removed a successful guest. Therefore
+                # a nonzero `docker rm` alone proves neither leak nor cleanup.
+                # Explicitly query Docker daemon for absence; fail closed if
+                # it is unavailable or reports that the container remains.
                 try:
                     _run([DOCKER, "rm", "-f", name], timeout=5)
-                except (OSError, subprocess.TimeoutExpired):
+                except (OSError, subprocess.TimeoutExpired, RuntimeError):
                     pass
+                try:
+                    checked = _run(
+                        [DOCKER, "ps", "-a", "--format", "{{.Names}}",
+                         "--filter", "name=^/" + name + "$"],
+                        timeout=5,
+                    )
+                    cleanup_confirmed = (
+                        checked.returncode == 0 and not checked.stdout.strip()
+                    )
+                except (OSError, subprocess.TimeoutExpired, RuntimeError):
+                    cleanup_confirmed = False
+            if not cleanup_confirmed:
+                return _response("BLOCKED", "Container removal not verified",
+                                 probe, image_id=image_id)
+            if execution_problem:
+                return _response("BLOCKED", execution_problem,
+                                 probe, image_id=image_id)
+            if result is None:
+                return _response("BLOCKED", "Docker execution unavailable",
+                                 probe, image_id=image_id)
             if result.returncode != 0:
                 return _response(
                     "BLOCKED", "Reviewed runtime probe failed or was denied",
@@ -177,7 +261,7 @@ def run_probe(probe):
                 "Fixed synthetic container probe observed configured restrictions",
                 probe, observed=observed["checked"], image_id=image_id,
             )
-    except (OSError, ValueError, subprocess.TimeoutExpired):
+    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
         return _response("BLOCKED", "Container runtime check failed", probe)
 
 
