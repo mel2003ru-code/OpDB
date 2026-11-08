@@ -27,3 +27,23 @@ A true multi-agent research executor needs a separately provisioned model runtim
 ## Next admission
 
 Safety, Core and Quality must deliver reviewed runnable tests, with exact seeds, independent oracle, data hashes, failure modes and performance budgets. Only then can the respective task be marked as genuinely tested.
+
+## Additional independent controls and scientific discovery (v0.4)
+
+### Mandatory P0 negative control (every 30-minute cycle)
+The research heartbeat now *deliberately* reproduces two unsafe behavior classes in an isolated SQLite fixture:
+- A cached derived Lens value becomes stale after a different connection commits a change.
+- A privileged editor forges a change-log payload while retaining the expected sequence and old image, causing an incorrect replayed Lens.
+
+If both counterexamples are demonstrated, the field is `EXPECTED_COUNTEREXAMPLE`; this is not a successful safety property of the actual OpDB engine. If the fixture stops demonstrating the expected result, the research run fails. Results appear in the GitHub Issue #17 rolling status and the job logs. The unresolved integration blocker remains Issue #21.
+
+### Weekly multi-runtime reproducibility
+`.github/workflows/research-matrix.yml`: runs four fixed seeds on Python 3.11/3.13 on Ubuntu plus Python 3.13 on Windows, records JSON in GitHub Actions logs and summaries. This checks the *research harness*, not complete cross-platform OpDB compatibility. It is intentionally scheduled weekly to avoid exhausting private runner minutes.
+
+### Weekly literature metadata radar
+`.github/workflows/literature-radar.yml`: queries public Crossref REST bibliographic metadata and logs DOI candidate lists (recent publications in four DB research areas). Candidates are **not evaluated research results**. Exact publisher/author claims and DOI details must be verified before scientific use. No article full text is automatically downloaded, and no model/paid inference API is invoked. Offline unit tests use mock responses.
+
+### Artifacts and missing executable engines
+The GitHub Actions artifact-storage quota is reported exhausted. All new workflows retain evidence in logs and Job Summary rather than calling `upload-artifact`. This avoids scheduled job failures from uploads, but logs have GitHub retention limits. For durable evidence, an explicitly reviewed PR may separately add small checked-in results with reproducible SHA-256.
+
+TASK-001, TASK-002 and TASK-003 retain `NOT_CONFIGURED` in scheduled checks until independent runnable adapters are supplied as reviewed source code, and Quality runs the integration matrix. No private chat is automatically executing every half-hour.
