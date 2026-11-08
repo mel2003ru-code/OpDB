@@ -49,61 +49,61 @@ jobs:
         with:
           retries: 3
           script: |
-          const fs = require('fs');
-          const {owner, repo} = context.repo;
-          const path = 'research-cycle.json';
-          if (!fs.existsSync(path)) {
-            core.setFailed('Research result missing: no status can be published');
-            return;
-          }
-          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const expectedTracks = ['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10',
-                                  'TASK-001','TASK-002','TASK-003'];
-          const byTrack = new Map(report.results.map(x => [x.track, x]));
-          if (byTrack.size !== 13 || expectedTracks.some(t => !byTrack.has(t))) {
-            core.setFailed('Incomplete track matrix: refusing to publish false progress');
-            return;
-          }
-          const day = new Date().toISOString().slice(0,10);
-          const marker = '<!-- opdb-cycle-daily:' + day + ' -->';
-          const results = expectedTracks.map(track => byTrack.get(track));
-          const counts = {};
-          for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
-          const runUrl = 'https://github.com/' + owner + '/' + repo + '/actions/runs/' + context.runId;
-          const rows = results.map(x =>
-            '| ['+x.track+'](https://github.com/'+owner+'/'+repo+'/issues/'+x.issue+') | '+
-            x.status+' | '+(x.assertions ?? '—')+' | '+String(x.scope || x.reason || x.error || '—').replaceAll('|','/').replaceAll('\n',' ')+' |'
-          );
-          const text = [
-            marker,
-            '# ⏱ OpDB — последнее исследование за '+day+' (UTC)',
-            '',
-            'Последний цикл: [GitHub Actions]('+runUrl+'), commit \`'+report.repository_sha+
-            '\`, seed \`'+report.seed+'\`.',
-            '',
-            '**Статусы:** '+Object.entries(counts).map(([name,n])=>name+' = '+n).join('; '),
-            '',
-            '| Направление | Результат | Проверки | Ограничение |',
-            '|---|---|---:|---|',
-            ...rows,
-            '',
-            '**Это лабораторные проверки SQLite/Python и синтетических моделей, а не 13 работающих ИИ-агентов.**',
-            'Статус SQLITE_SMOKE_PASS/MODEL_SMOKE_PASS не означает доказанную корректность OpDB,',
-            'отсутствие багов, ACID, промышленную отказоустойчивость или выигрыш в скорости.',
-            'NOT_CONFIGURED — проверяемого модуля данного направления пока нет.',
-            '',
-            'Полный машиночитаемый JSON находится в журнале этого запуска GitHub Actions; ',
-            'в Actions storage ничего не загружается из-за исчерпанной квоты.',
-            '',
-          ].join('\n');
-          await core.summary.addRaw(text).write();
-          const comments = await github.paginate(github.rest.issues.listComments,
-            {owner,repo,issue_number:17,per_page:100});
-          const prior = comments.find(x => (x.body || '').includes(marker));
-          if (prior) {
-            await github.rest.issues.updateComment({owner,repo,comment_id:prior.id,body:text});
-            core.info('Updated the same-day research summary comment in Issue #17');
-          } else {
-            await github.rest.issues.createComment({owner,repo,issue_number:17,body:text});
-            core.info('Created the first research summary comment for this UTC date in Issue #17');
-          }
+            const fs = require('fs');
+            const {owner, repo} = context.repo;
+            const path = 'research-cycle.json';
+            if (!fs.existsSync(path)) {
+              core.setFailed('Research result missing: no status can be published');
+              return;
+            }
+            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const expectedTracks = ['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10',
+                                    'TASK-001','TASK-002','TASK-003'];
+            const byTrack = new Map(report.results.map(x => [x.track, x]));
+            if (byTrack.size !== 13 || expectedTracks.some(t => !byTrack.has(t))) {
+              core.setFailed('Incomplete track matrix: refusing to publish false progress');
+              return;
+            }
+            const day = new Date().toISOString().slice(0,10);
+            const marker = '<!-- opdb-cycle-daily:' + day + ' -->';
+            const results = expectedTracks.map(track => byTrack.get(track));
+            const counts = {};
+            for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
+            const runUrl = 'https://github.com/' + owner + '/' + repo + '/actions/runs/' + context.runId;
+            const rows = results.map(x =>
+              '| ['+x.track+'](https://github.com/'+owner+'/'+repo+'/issues/'+x.issue+') | '+
+              x.status+' | '+(x.assertions ?? '—')+' | '+String(x.scope || x.reason || x.error || '—').replaceAll('|','/').replaceAll('\n',' ')+' |'
+            );
+            const text = [
+              marker,
+              '# ⏱ OpDB — последнее исследование за '+day+' (UTC)',
+              '',
+              'Последний цикл: [GitHub Actions]('+runUrl+'), commit `'+report.repository_sha+
+              '`, seed `'+report.seed+'`.',
+              '',
+              '**Статусы:** '+Object.entries(counts).map(([name,n])=>name+' = '+n).join('; '),
+              '',
+              '| Направление | Результат | Проверки | Ограничение |',
+              '|---|---|---:|---|',
+              ...rows,
+              '',
+              '**Это лабораторные проверки SQLite/Python и синтетических моделей, а не 13 работающих ИИ-агентов.**',
+              'Статус SQLITE_SMOKE_PASS/MODEL_SMOKE_PASS не означает доказанную корректность OpDB,',
+              'отсутствие багов, ACID, промышленную отказоустойчивость или выигрыш в скорости.',
+              'NOT_CONFIGURED — проверяемого модуля данного направления пока нет.',
+              '',
+              'Полный машиночитаемый JSON находится в журнале этого запуска GitHub Actions; ',
+              'в Actions storage ничего не загружается из-за исчерпанной квоты.',
+              '',
+            ].join('\n');
+            await core.summary.addRaw(text).write();
+            const comments = await github.paginate(github.rest.issues.listComments,
+              {owner,repo,issue_number:17,per_page:100});
+            const prior = comments.find(x => (x.body || '').includes(marker));
+            if (prior) {
+              await github.rest.issues.updateComment({owner,repo,comment_id:prior.id,body:text});
+              core.info('Updated the same-day research summary comment in Issue #17');
+            } else {
+              await github.rest.issues.createComment({owner,repo,issue_number:17,body:text});
+              core.info('Created the first research summary comment for this UTC date in Issue #17');
+            }
