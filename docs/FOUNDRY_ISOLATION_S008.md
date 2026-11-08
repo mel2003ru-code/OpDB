@@ -30,7 +30,8 @@ untrusted review surface; this must be corrected before expanding the executor.
   `--security-opt=no-new-privileges`, `--user=65534:65534`,
   `--pids-limit=32`, `--cpus=0.5`, `--memory=128m`,
   `--memory-swap=128m`, `--tmpfs=/tmp:rw,noexec,nosuid,size=8m` and
-  `--shm-size=8m`. No Docker socket mount. Immutable OCI image digest from
+  `--shm-size=8m`, and `--log-driver=none` (no Docker daemon-side
+  log-file accumulation). No Docker socket mount. Immutable OCI image digest from
   the S-006 pinned-image policy, no implicit pull during execution.
 * `foundry/isolated_worker.py`: bounded Docker CLI stdout/stderr (shared
   64 KiB through the existing driver), bounded wall-clock time (25 seconds),
@@ -63,10 +64,23 @@ untrusted review surface; this must be corrected before expanding the executor.
   completed successfully. Docker logs contain `S008_FIXED_GUEST_OBSERVED`
   and `independent trusted controller NOT ATTESTED`; the generated patch was
   quarantined for review, and the source checkout remained unmodified.
-* A later change adds adversarial report-field injection tests and the
-  separate **real missing-shm-limit negative control**. The latest CI status
-  and exact head must be checked before citing that additional evidence as
-  successful; evidence above refers only to its exact older commit.
+* Real negative control, exact SHA `e950767d83793c32e83d89581fb279d40fdc1cf5`,
+  [Docker CI #42492813621](https://github.com/mel2003ru-code/OpDB/actions/runs/42492813621):
+  a reviewed container intentionally run WITHOUT `--shm-size=8m` exited
+  nonzero, with `shm_8m=false`, correct network isolation and confirmed
+  cleanup. Logs include `EXPECTED_S008_NEGATIVE`. At this SHA,
+  [full CI #42492813694](https://github.com/mel2003ru-code/OpDB/actions/runs/42492813694)
+  ran 244/244 PASS and
+  [Foundry Gate #42492813592](https://github.com/mel2003ru-code/OpDB/actions/runs/42492813592)
+  ran 163/163 PASS.
+* Final code hardening at `8841c14614f1cd6dc6d3e657e26629ac41649d12`
+  additionally disables Docker daemon logging while preserving bounded
+  stdout/stderr for the controller.
+  [Full CI #42493053102](https://github.com/mel2003ru-code/OpDB/actions/runs/42493053102),
+  [Foundry Gate #42493053075](https://github.com/mel2003ru-code/OpDB/actions/runs/42493053075)
+  and [real Docker CI #42493053098](https://github.com/mel2003ru-code/OpDB/actions/runs/42493053098)
+  all completed successfully. This is still evidence from a PR-controlled
+  workflow, not independent Safety/Quality authorization.
 
 ## Mandatory blockers / S-008B
 
