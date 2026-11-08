@@ -184,10 +184,10 @@ jobs:
               encoding="utf-8"
           )
           PY
-          python -m foundry.isolated_worker \\
-            --request-file s008-request.json \\
-            --expected-sha "$GITHUB_SHA" \\
-            --checkout "$GITHUB_WORKSPACE" \\
+          python -m foundry.isolated_worker \
+            --request-file s008-request.json \
+            --expected-sha "$GITHUB_SHA" \
+            --checkout "$GITHUB_WORKSPACE" \
             --output s008-isolation-evidence.json
           python - <<'PY'
           import json
