@@ -1,11 +1,16 @@
-name: Foundry metadata checks
+name: Foundry CI — metadata and research tests
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
+permissions:
+  contents: read
+
 jobs:
   validate-handoff-metadata:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -13,5 +18,5 @@ jobs:
           python-version: '3.11'
       - name: Check handoff template schema
         run: python scripts/validate_handoff.py workstreams/HANDOFF_TEMPLATE.json
-      - name: Run metadata-only unit tests
-        run: python -m unittest discover -s tests -p 'test_handoff_*.py' -v
+      - name: Run all repository unit tests, including bounded SQLite research probes
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
