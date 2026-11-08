@@ -1,5 +1,7 @@
 name: OpDB Foundry daily status
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '13 5 * * *'
   workflow_dispatch:
