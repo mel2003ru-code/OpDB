@@ -104,6 +104,26 @@ class SandboxPolicyTests(unittest.TestCase):
                     self.assertEqual(verdict["state"], "BLOCKED",
                                      "Unreviewed path must not be mounted")
 
+    def test_reviewed_fixture_root_with_modified_source_must_fail_closed(self):
+        """Matching a trusted path does NOT make altered Python bytes trusted."""
+        import shutil
+        from unittest.mock import patch as patch_value
+        names = ("calculator.py", "quality_probe.py",
+                 "sandbox_runtime_probe.py", "sandbox_adversarial_probe.py")
+        with tempfile.TemporaryDirectory(prefix="tampered-reviewed-fixture-") as tmp:
+            root = Path(tmp)
+            for name in names:
+                shutil.copyfile(_FIXTURE / name, root / name)
+            (root / "sandbox_runtime_probe.py").write_text(
+                "raise RuntimeError('unreviewed code')\\n", encoding="utf-8"
+            )
+            with patch_value("foundry.sandbox_policy._REVIEWED_FIXTURE", root):
+                for probe in ("confinement", "adversarial"):
+                    with self.subTest(probe=probe):
+                        decision = plan(IMAGE, root, probe=probe)
+                        self.assertEqual(decision["state"], "BLOCKED",
+                                         "Changed reviewed bytes must not run")
+
     def test_no_fixture_files_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(plan(IMAGE, tmp)["state"], "BLOCKED")
