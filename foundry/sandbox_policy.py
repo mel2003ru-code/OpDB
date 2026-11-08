@@ -25,6 +25,7 @@ _REVIEWED_CONTENT_SHA256 = {
     "quality_probe.py": "3f636ed87e607ec2f5869492336449cc313b5deaf3ccb4a9338f9e31c79347a2",
     "sandbox_runtime_probe.py": "a0f56d4e067186e1a7f0c5babca9539f635739e3b5250948bf95bd08afd3268a",
     "sandbox_adversarial_probe.py": "928d8d75bf9dd62ff9f27f9579edbb6fddf3a3b558d05d8b43db23206c2078ba",
+    "handoff_worker.py": "e44d1af3bb9fa6e1b20be4789bbdc3b4a3d6e147ed57c5bf4bde273929ac350a",
 }
 _MAX_REVIEWED_BYTES = 16 * 1024
 
@@ -48,7 +49,7 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         return dict(locked, state="BLOCKED", reason="Exact allowlisted image digest required")
     if type(time_seconds) is not int or not 1 <= time_seconds <= _MAX_SECONDS:
         return dict(locked, state="BLOCKED", reason="Invalid bounded time budget")
-    if type(probe) is not str or probe not in ("quality", "confinement", "adversarial"):
+    if type(probe) is not str or probe not in ("quality", "confinement", "adversarial", "handoff"):
         return dict(locked, state="BLOCKED", reason="Only reviewed synthetic probes permitted")
     if not isinstance(fixture_path, (str, Path)):
         return dict(locked, state="BLOCKED", reason="Reviewed fixture path required")
@@ -63,10 +64,12 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         if not root.is_absolute() or root.is_symlink() or not root.is_dir():
             return dict(locked, state="BLOCKED", reason="Absolute nonsymlink work directory required")
         checks = ("calculator.py", "quality_probe.py")
-        if probe in ("confinement", "adversarial"):
+        if probe in ("confinement", "adversarial", "handoff"):
             checks += ("sandbox_runtime_probe.py",)
-        if probe == "adversarial":
+        if probe in ("adversarial", "handoff"):
             checks += ("sandbox_adversarial_probe.py",)
+        if probe == "handoff":
+            checks += ("handoff_worker.py",)
         if any(not (root / x).is_file() or (root / x).is_symlink()
                for x in checks):
             return dict(locked, state="BLOCKED", reason="Missing reviewed fixture files")
@@ -92,13 +95,14 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         "--network=none", "--read-only",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--pids-limit=32", "--memory=128m", "--memory-swap=128m",
-        "--cpus=0.5", "--user=65534:65534",
+        "--cpus=0.5", "--user=65534:65534", "--shm-size=8m",
         "--workdir=/work", "--tmpfs=/tmp:rw,noexec,nosuid,size=8m",
         "--mount=type=bind,src=" + str(root) + ",dst=/work,readonly",
         image, "python", "-I", "-B",
         (_TEST if probe == "quality" else
          "/work/sandbox_runtime_probe.py" if probe == "confinement" else
-         "/work/sandbox_adversarial_probe.py"),
+         "/work/sandbox_adversarial_probe.py" if probe == "adversarial" else
+         "/work/handoff_worker.py"),
     ]
     return dict(
         locked, state="POLICY_PLAN_ONLY", image=image, command_argv=argv,
@@ -111,7 +115,7 @@ def main(argv=None):
     p.add_argument("--image", help="Previously verified local python:3.11-slim@sha256:<digest>")
     p.add_argument("--fixture", help="Absolute path of an isolated reviewed fixture")
     p.add_argument("--budget-seconds", type=int, default=10)
-    p.add_argument("--probe", choices=("quality", "confinement", "adversarial"), default="quality")
+    p.add_argument("--probe", choices=("quality", "confinement", "adversarial", "handoff"), default="quality")
     args = p.parse_args(argv)
     result = plan(args.image, args.fixture, args.budget_seconds, args.probe)
     print(json.dumps(result, indent=2, ensure_ascii=False))
