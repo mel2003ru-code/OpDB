@@ -56,6 +56,8 @@ def run_stub(probe, *, failure=None, observed=None):
             return observed or valid_observation(probe)
         if "rm" in args:
             return completed()
+        if "ps" in args:
+            return completed(stdout="")
         raise AssertionError("Unknown docker call: " + str(args))
     return runner, calls
 
@@ -97,14 +99,21 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
         self.assertEqual(environment["DOCKER_HOST"], "unix:///var/run/docker.sock")
 
     def test_real_subprocess_wrapper_has_no_shell_or_global_env(self):
-        with patch("foundry.sandbox_runner.subprocess.run") as fake:
-            _run([DOCKER, "version"], timeout=3)
+        import sys
+        with (patch("foundry.sandbox_runner.DOCKER", sys.executable),
+              patch("foundry.sandbox_runner.subprocess.Popen",
+                    wraps=subprocess.Popen) as fake):
+            result = _run([sys.executable, "-c", "print('FIXED_OK')"], timeout=5)
         kwargs = fake.call_args.kwargs
-        self.assertEqual(kwargs["executable"], DOCKER)
+        self.assertEqual(kwargs["executable"], sys.executable)
         self.assertFalse(kwargs.get("shell", False))
-        self.assertTrue(kwargs["capture_output"])
-        self.assertEqual(kwargs["timeout"], 3)
+        self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
+        self.assertEqual(kwargs["stdout"], subprocess.PIPE)
+        self.assertEqual(kwargs["stderr"], subprocess.PIPE)
+        self.assertTrue(kwargs["start_new_session"])
         self.assertEqual(kwargs["env"], _docker_env())
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("FIXED_OK", result.stdout)
 
     def test_confinement_success_remains_review_only(self):
         stub, calls = run_stub("confinement")
@@ -115,7 +124,7 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
         self.assertIsNotNone(result["observed"])
         self.assertFalse(result["candidate_executed"])
         self.assertFalse(result["agent_sandbox_attested"])
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
         cmd = calls[1][0]
         self.assertEqual(cmd[0], DOCKER)
         self.assertIn("--network=none", cmd)
@@ -129,7 +138,8 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
         self.assertTrue(any(x.startswith("--cidfile=") for x in cmd))
         self.assertIn(PINNED_IMAGE, cmd)
         self.assertEqual(cmd[-1], "/work/sandbox_runtime_probe.py")
-        self.assertEqual(calls[-1][0][1:3], ("rm", "-f"))
+        self.assertEqual(calls[-2][0][1:3], ("rm", "-f"))
+        self.assertEqual(calls[-1][0][1:3], ("ps", "-a"))
 
     def test_adversarial_probe_must_pass_observation(self):
         stub, calls = run_stub("adversarial")
@@ -138,7 +148,7 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
             result = run_probe("adversarial")
         self.assertEqual(result["state"], "REVIEWED_PROBE_PASS")
         self.assertEqual(calls[1][0][-1], "/work/sandbox_adversarial_probe.py")
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
         self.assertFalse(result["launch_authorized"])
 
     def test_never_implicitly_pulls_missing_image(self):
@@ -204,6 +214,8 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
         def failed_cleanup(args, *, timeout):
             if args[1:3] == [ "rm", "-f" ]:
                 return completed(1, stderr="daemon refused cleanup")
+            if args[1:3] == ["ps", "-a"]:
+                return completed(stdout="opdb-synthetic-smoke\n")
             if "inspect" in args:
                 return completed(stdout="sha256:" + "a" * 64 + "\\n")
             if "run" in args:
@@ -221,6 +233,8 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
         def timeout_cleanup(args, *, timeout):
             if args[1:3] == ["rm", "-f"]:
                 raise subprocess.TimeoutExpired(args, timeout)
+            if args[1:3] == ["ps", "-a"]:
+                return completed(1, stderr="daemon unavailable")
             if "inspect" in args:
                 return completed(stdout="sha256:" + "a" * 64 + "\\n")
             if "run" in args:
