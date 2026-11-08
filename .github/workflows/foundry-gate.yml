@@ -1,0 +1,34 @@
+name: Foundry gated research preflight
+on:
+  pull_request:
+    paths:
+      - 'foundry/**'
+      - 'tests/test_foundry_control.py'
+      - '.github/workflows/foundry-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate for isolated verification only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Exercise negative and synthetic victory cases
+        run: python -m unittest -v tests.test_foundry_control
+      - name: Demand explicit NOT_CONFIGURED without real evidence
+        shell: bash
+        run: |
+          python -m foundry.control --output foundry-decision.json
+          python -c 'import json; d=json.load(open("foundry-decision.json")); assert d["state"] == "NOT_CONFIGURED" and not d["production_allowed"] and not d["pause_autonomous_improvements"]'
+      - name: Explain trust boundary
+        run: echo "No actual adapter verified, no external benchmark executed, no automatic release, merge or deployment."
