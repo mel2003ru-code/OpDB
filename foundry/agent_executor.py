@@ -9,8 +9,6 @@ import argparse
 import difflib
 import hashlib
 import json
-import math
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -164,18 +162,29 @@ def main(argv=None):
     parser.add_argument("--expected-sha", required=True)
     parser.add_argument("--demo-task", action="store_true",
                         help="Run one fixed synthetic Issue #31 task")
+    parser.add_argument("--task-file",
+                        help="Strict allowlisted JSON from read-only GitHub issue intake")
     parser.add_argument("--output", help="Report JSON; no GitHub side effects")
     args = parser.parse_args(argv)
-    if not args.demo_task:
-        result = _decision("NOT_CONFIGURED",
-                           details=["No approved synthetic task was selected"])
-    else:
+    if args.demo_task and args.task_file:
+        result = _decision("BLOCKED", details=["Select exactly one task source"])
+    elif args.task_file:
+        try:
+            task = json.loads(Path(args.task_file).read_text(encoding="utf-8"))
+            result = execute(task, args.expected_sha)
+        except (OSError, ValueError, UnicodeError) as exc:
+            result = _decision("BLOCKED", details=[
+                type(exc).__name__ + ": " + str(exc)])
+    elif args.demo_task:
         task = {
             "schema_version": 1, "task_key": _TASK, "issue_number": _ISSUE,
             "source_sha": args.expected_sha, "max_attempts": 1,
             "budget_seconds": _MAX_SECONDS,
         }
         result = execute(task, args.expected_sha)
+    else:
+        result = _decision("NOT_CONFIGURED",
+                           details=["No approved synthetic task was selected"])
     encoded = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
     print(encoded, end="")
     if args.output:
