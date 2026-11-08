@@ -188,6 +188,79 @@ class CoreOracleTests(unittest.TestCase):
         self.assertEqual(self.store.get("a"), b"v1")
         self.assertFalse(self.store.admit_lens(candidate).accepted)
 
+    def test_external_integer_value_must_not_be_fabricated_by_bytes_coercion(self):
+        """SQLite BLOB affinity allows INTEGER; bytes(3) silently makes 3 NULs."""
+        self.store.put("k", b"original")
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=3 WHERE k='k'")
+            self.assertEqual(writer.execute(
+                "SELECT typeof(v) FROM opdb_source_kv WHERE k='k'"
+            ).fetchone()[0], "integer")
+        with self.assertRaisesRegex(RuntimeError, "non-BLOB"):
+            self.store.get("k")
+
+    def test_external_zero_integer_must_not_appear_as_empty_blob(self):
+        """bytes(0)==b'' was even more misleading than the positive INTEGER."""
+        self.store.put("k", b"original")
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=0 WHERE k='k'")
+        with self.assertRaisesRegex(RuntimeError, "non-BLOB"):
+            self.store.get("k")
+
+    def test_external_non_blob_fails_all_core_read_paths(self):
+        self.store.put("k", b"initial")
+        candidate = self.store.build_lens_candidate()
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=? WHERE k=?", (5, "k"))
+        for read in (
+            lambda: self.store.get("k"),
+            lambda: self.store.scan(),
+            lambda: self.store.snapshot(),
+            lambda: self.store.build_lens_candidate(),
+        ):
+            with self.subTest(read=read), self.assertRaisesRegex(RuntimeError, "non-BLOB"):
+                read()
+        self.assertFalse(self.store.admit_lens(candidate).accepted)
+
+    def test_external_text_value_reports_integrity_error_not_type_error(self):
+        self.store.put("k", b"initial")
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=? WHERE k=?", ("oops", "k"))
+        for read in (lambda: self.store.get("k"), lambda: self.store.snapshot()):
+            with self.subTest(read=read), self.assertRaisesRegex(RuntimeError, "non-BLOB"):
+                read()
+
+    def test_external_oversize_blob_fails_closed_even_if_written_directly(self):
+        self.store.put("k", b"small")
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=? WHERE k=?",
+                           (b"z" * (1024 * 1024 + 1), "k"))
+        with self.assertRaisesRegex(RuntimeError, "oversized"):
+            self.store.get("k")
+        with self.assertRaisesRegex(RuntimeError, "oversized"):
+            self.store.snapshot()
+
+    def test_external_nul_key_cannot_escape_core_input_contract(self):
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("INSERT INTO opdb_source_kv VALUES (?,?)",
+                           ("bad\x00key", b"value"))
+        with self.assertRaisesRegex(RuntimeError, "invalid source key"):
+            self.store.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "invalid source key"):
+            self.store.scan()
+
+    def test_external_value_repair_restores_authoritative_reads(self):
+        self.store.put("k", b"original")
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=3 WHERE k='k'")
+        with self.assertRaisesRegex(RuntimeError, "non-BLOB"):
+            self.store.get("k")
+        with sqlite3.connect(self.path) as writer:
+            writer.execute("UPDATE opdb_source_kv SET v=? WHERE k=?", (b"repaired", "k"))
+        self.assertEqual(self.store.get("k"), b"repaired")
+        self.assertEqual(self.store.snapshot().rows, (("k", b"repaired"),))
+        self.assertFalse(self.store.lens_enabled)
+
     def test_source_table_drop_fails_explicitly_not_stale(self):
         self.store.put("a", b"v0")
         candidate = self.store.build_lens_candidate()
