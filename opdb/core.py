@@ -159,6 +159,22 @@ class TruthStore:
         if self._closed:
             raise RuntimeError("TruthStore is closed")
 
+    def _ensure_source_schema(self) -> None:
+        """Verify table identity inside the transaction containing the operation.
+
+        This rejects externally substituted VIEWs/tables at operation time.
+        It is NOT proof against tampering with data in the expected table,
+        writers with filesystem access, or a trusted change-capture journal.
+        """
+        source = self._db.execute(
+            "SELECT type, sql FROM sqlite_schema WHERE name = ?",
+            ("opdb_source_kv",),
+        ).fetchone()
+        if source != ("table", _SOURCE_TABLE_SQL):
+            raise SourceIntegrityError(
+                "unexpected source table schema; refusing operation"
+            )
+
     def close(self) -> None:
         with self._lock:
             if not self._closed:
@@ -205,6 +221,7 @@ class TruthStore:
             self._ensure_open()
             self._db.execute("BEGIN IMMEDIATE")
             try:
+                self._ensure_source_schema()
                 for item in checked:
                     if item[0] == "put":
                         self._db.execute(
@@ -231,13 +248,18 @@ class TruthStore:
         key = _key(key)
         with self._lock:
             self._ensure_open()
-            result = self._db.execute(
-                "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
-                "THEN v ELSE NULL END, typeof(v), length(v) "
-                "FROM opdb_source_kv WHERE k=?",
-                (MAX_VALUE_BYTES, key),
-            ).fetchone()
-        return _source_row(result)[1] if result is not None else None
+            self._db.execute("BEGIN")
+            try:
+                self._ensure_source_schema()
+                result = self._db.execute(
+                    "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
+                    "THEN v ELSE NULL END, typeof(v), length(v) "
+                    "FROM opdb_source_kv WHERE k=?",
+                    (MAX_VALUE_BYTES, key),
+                ).fetchone()
+                return _source_row(result)[1] if result is not None else None
+            finally:
+                self._db.execute("ROLLBACK")
 
     def scan(self, prefix: str = "", limit: int = MAX_SCAN) -> tuple[tuple[str, bytes], ...]:
         prefix = _key(prefix, allow_empty=True)
@@ -245,22 +267,27 @@ class TruthStore:
             raise ValueError("limit must be an integer in 1..1000")
         with self._lock:
             self._ensure_open()
-            rows = []
-            accounted_bytes = 0
-            for raw in self._db.execute(
-                "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
-                "THEN v ELSE NULL END, typeof(v), length(v) "
-                "FROM opdb_source_kv "
-                "WHERE substr(k,1,length(?))=? COLLATE BINARY "
-                "ORDER BY k COLLATE BINARY LIMIT ?",
-                (MAX_VALUE_BYTES, prefix, prefix, limit),
-            ):
-                item = _source_row(raw)
-                accounted_bytes += len(item[0].encode("utf-8")) + len(item[1])
-                if accounted_bytes > MAX_SCAN_BYTES:
-                    raise SourceCapacityError("scan exceeds allowed bytes")
-                rows.append(item)
-        return tuple(rows)
+            self._db.execute("BEGIN")
+            try:
+                self._ensure_source_schema()
+                rows = []
+                accounted_bytes = 0
+                for raw in self._db.execute(
+                    "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
+                    "THEN v ELSE NULL END, typeof(v), length(v) "
+                    "FROM opdb_source_kv "
+                    "WHERE substr(k,1,length(?))=? COLLATE BINARY "
+                    "ORDER BY k COLLATE BINARY LIMIT ?",
+                    (MAX_VALUE_BYTES, prefix, prefix, limit),
+                ):
+                    item = _source_row(raw)
+                    accounted_bytes += len(item[0].encode("utf-8")) + len(item[1])
+                    if accounted_bytes > MAX_SCAN_BYTES:
+                        raise SourceCapacityError("scan exceeds allowed bytes")
+                    rows.append(item)
+                return tuple(rows)
+            finally:
+                self._db.execute("ROLLBACK")
 
     def snapshot(self) -> SourceSnapshot:
         """Rows are observed in one SQLite read transaction.
@@ -272,6 +299,7 @@ class TruthStore:
             self._ensure_open()
             self._db.execute("BEGIN")
             try:
+                self._ensure_source_schema()
                 accumulated = []
                 accounted_bytes = 0
                 for raw in self._db.execute(

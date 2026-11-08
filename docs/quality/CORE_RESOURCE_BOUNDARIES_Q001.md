@@ -50,3 +50,35 @@ Safety must define enforceable writer restriction or trustworthy committed chang
 **Bounded mitigation in this existing stacked Quality draft PR:** after opening SQLite and issuing the canonical `CREATE TABLE IF NOT EXISTS`, verify the `sqlite_schema` object is a real `table` with exactly the expected canonical SQL definition. If not, raise `SourceIntegrityError` and close the connection. Legitimate files created by this adapter still reopen and preserve data. Explicit negative tests cover a forged VIEW, missing PK, wrong NOCASE PK collation and wrong value-column type.
 
 **Scope/limitations:** This strict startup check intentionally rejects otherwise equivalent but differently declared preexisting tables; this experimental adapter does not offer migrations. It does **not** authenticate the SQLite file, prevent privileged writers from changing tables/triggers *after* open, protect journal capture, or establish trusted Lens admission. P0 #21 remains OPEN, all user reads remain SQLite SOURCE_ONLY and `admit_lens` continues to refuse. The standalone SQLite demonstration exercised the schema condition, **not the full repository regression tests**. CI on the eventual new PR SHA is **NOT VERIFIED** until GitHub Actions executes a real runner with steps; historical PASS on the previous SHA cannot be carried forward.
+
+
+## Quality Q-Core-003 — fail closed after *post-open* schema substitution
+
+The prior Q-Core-002 startup check alone does not prevent an external
+privileged SQLite connection from replacing the table with a view (or a
+no-primary-key table) **after** the `TruthStore` instance opens. A local
+SQLite-only adversarial reproducer confirmed that an existing open connection
+then reads rows from the forged view if it performs no subsequent check.
+
+In this stacked **Draft PR #34**, the actual Core adapter now checks the
+canonical source-table type and SQL **inside the same SQLite transaction**
+as each `get`, `scan`, `snapshot`, `put/delete/apply` operation. Read
+transactions pin schema and source rows to one SQLite snapshot; write
+transactions obtain `BEGIN IMMEDIATE` before validating the schema.
+A replaced view or incompatible table causes `SourceIntegrityError`;
+the write transaction rolls back, and public Lens admission remains false.
+
+Additional direct regression tests cover post-open VIEW substitution for
+all public operations, replacement with a duplicate-key-capable table,
+and a positive control that normal external committed DML remains visible
+through source-only reads. The transaction-bound mitigation was rehearsed
+in a minimal local SQLite reproducer; **full repository unit tests at the
+new commit remain NOT VERIFIED** until an actual runner executes them.
+
+**Security limits:** a privileged external actor can still edit *values
+within* the correct-looking table, forge history, replay writes, or modify
+the SQLite database file. A schema check is not a trusted change-capture
+journal, a version certificate, or proof of authorized writes. It also
+adds a transaction/schema-query cost to each point read and scan.
+P0 #21 stays OPEN; accelerated Lens output remains disabled by design.
+No owner Launch Gate, production, merge, or autonomous worker access.

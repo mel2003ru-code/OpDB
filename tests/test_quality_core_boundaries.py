@@ -71,6 +71,58 @@ class IndependentBoundaryQuality(unittest.TestCase):
                 with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
                     TruthStore(self.path)
 
+    def test_external_committed_dml_is_still_read_from_authoritative_source(self):
+        with sqlite3.connect(self.path) as outside:
+            outside.execute(
+                "INSERT INTO opdb_source_kv(k,v) VALUES (?, ?)",
+                ("external", b"correct"),
+            )
+        self.assertEqual(self.store.get("external"), b"correct")
+        self.assertEqual(self.store.scan("external"), (("external", b"correct"),))
+        self.assertEqual(self.store.snapshot().rows, self._oracle())
+        self.assertEqual(self.store.read_mode, "SOURCE_ONLY")
+
+    def test_post_open_view_substitution_refused_by_every_public_operation(self):
+        self.store.put("before", b"source")
+        with sqlite3.connect(self.path) as outside:
+            outside.execute("DROP TABLE opdb_source_kv")
+            outside.execute(
+                "CREATE VIEW opdb_source_kv AS "
+                "SELECT 'forged' AS k, CAST('payload' AS BLOB) AS v"
+            )
+        for name, operation in (
+            ("get", lambda: self.store.get("forged")),
+            ("scan", lambda: self.store.scan()),
+            ("snapshot", lambda: self.store.snapshot()),
+            ("put", lambda: self.store.put("new", b"v")),
+            ("delete", lambda: self.store.delete("forged")),
+            ("lens-build", lambda: self.store.build_lens_candidate()),
+        ):
+            with self.subTest(operation=name):
+                with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
+                    operation()
+                self.assertEqual(self.store.read_mode, "SOURCE_ONLY")
+                self.assertFalse(self.store.lens_enabled)
+
+    def test_post_open_table_contract_loss_refused(self):
+        self.store.put("before", b"source")
+        with sqlite3.connect(self.path) as outside:
+            outside.execute("DROP TABLE opdb_source_kv")
+            outside.execute("CREATE TABLE opdb_source_kv (k TEXT, v BLOB)")
+            outside.execute(
+                "INSERT INTO opdb_source_kv(k,v) VALUES (?, ?)", ("duplicate", b"a")
+            )
+            outside.execute(
+                "INSERT INTO opdb_source_kv(k,v) VALUES (?, ?)", ("duplicate", b"b")
+            )
+        with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
+            self.store.get("duplicate")
+        with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
+            self.store.scan()
+        with self.assertRaisesRegex(SourceIntegrityError, "source table schema"):
+            self.store.snapshot()
+        self.assertFalse(self.store.lens_enabled)
+
     def test_abort_generator_at_first_invalid_operation(self):
         """Do not prefetch thousands of operations after an invalid first one."""
         seen = []
