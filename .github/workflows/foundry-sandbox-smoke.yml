@@ -8,6 +8,7 @@ on:
       - 'tests/test_sandbox_smoke.py'
       - 'tests/test_sandbox_policy.py'
       - 'tests/test_sandbox_negative.py'
+      - 'tests/test_sandbox_adversarial.py'
       - '.github/workflows/foundry-sandbox-smoke.yml'
   workflow_dispatch:
 
@@ -33,7 +34,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validate safe planning and synthetic failure guards
-        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_smoke tests.test_sandbox_negative
+        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_smoke tests.test_sandbox_negative tests.test_sandbox_adversarial
       - name: Confirm disposable Docker daemon available
         shell: bash
         run: |
@@ -115,11 +116,40 @@ jobs:
           assert report["launch_authorized"] is False
           print("EXPECTED_NEGATIVE_CONTROLS: network, UID, memory detected")
           PY
+      - name: Exercise fixed denied-operation fixture and two controlled negative checks
+        shell: bash
+        run: |
+          python -m foundry.sandbox_adversarial \
+            --image "$OPDB_TEST_IMAGE" \
+            --fixture "$GITHUB_WORKSPACE/foundry/fixtures" \
+            --output adversarial-sandbox-evidence.json
+          python - <<'PY'
+          import json
+          with open("adversarial-sandbox-evidence.json", encoding="utf-8") as f:
+              r=json.load(f)
+          assert r["state"] == "FIXED_DENIALS_OBSERVED"
+          assert set(r["observations"]) == {
+              "root_write_denied", "source_write_denied",
+              "docker_socket_absent", "secret_names_absent",
+              "seccomp_filter_active", "baseline_confinement_pass",
+              "no_host_network_interface",
+          }
+          assert all(v is True for v in r["observations"].values())
+          assert r["negative_controls_verified"] is True
+          assert r["synthetic_canary_detected"] is True
+          assert r["synthetic_relaxed_seccomp_detected"] is True
+          assert r["model_patch_execution_authorized"] is False
+          assert r["arbitrary_code_isolation_attested"] is False
+          assert r["github_write_allowed"] is False
+          assert r["production_allowed"] is False
+          assert r["launch_authorized"] is False
+          print("EXPECTED_FIXED_DENIALS: fake-secret and disabled-seccomp detected")
+          PY
       - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
         if: always()
         shell: bash
         run: |
-          for evidence in fixed-sandbox-evidence.json sandbox-negative-evidence.json; do
+          for evidence in fixed-sandbox-evidence.json sandbox-negative-evidence.json adversarial-sandbox-evidence.json; do
             if [ -s "$evidence" ]; then
               echo "=== $evidence / source SHA $GITHUB_SHA ==="
               cat "$evidence"
