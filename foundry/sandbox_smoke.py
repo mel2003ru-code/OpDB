@@ -72,9 +72,10 @@ def smoke(image, fixture, *, budget_seconds=12):
             return _deny("Fixed synthetic container probe FAILED, return code "
                          + str(result.returncode) + " (no candidate admitted)")
         report = json.loads(result.stdout.strip())
+        if type(report) is not dict:
+            return _deny("In-container report is not a JSON object")
         checks = report.get("checked")
-        if (type(report) is not dict
-                or report.get("probe") != "synthetic-fixed-review-only"
+        if (report.get("probe") != "synthetic-fixed-review-only"
                 or report.get("passed") is not True
                 or report.get("untrusted_code_executed") is not False
                 or report.get("full_agent_sandbox_attested") is not False
