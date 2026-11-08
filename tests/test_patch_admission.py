@@ -179,6 +179,22 @@ class PatchQuarantineTests(unittest.TestCase):
         self.assertEqual(SOURCE.read_bytes(), before)
         self.assert_readonly(result)
 
+    def test_cli_refuses_oversized_untrusted_json_before_loading(self):
+        with tempfile.TemporaryDirectory() as folder:
+            prop = Path(folder) / "huge.json"
+            prop.write_bytes(b" " * (16 * 1024 + 1))
+            out = Path(folder) / "refusal.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = main([
+                    "--proposal", str(prop), "--expected-sha", SHA,
+                    "--checkout", str(ROOT), "--output", str(out),
+                ])
+            self.assertEqual(rc, 2)
+            response = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(response["state"], "REJECTED")
+            self.assertIn("16 KiB", response["reasons"][0])
+            self.assert_readonly(response)
+
     def test_cli_bad_file_denied(self):
         with tempfile.TemporaryDirectory() as folder:
             with contextlib.redirect_stdout(io.StringIO()):
