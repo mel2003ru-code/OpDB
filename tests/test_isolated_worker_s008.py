@@ -20,7 +20,7 @@ def completed(code=0, stdout=""):
     return subprocess.CompletedProcess([DOCKER], code, stdout, "")
 
 
-def stub_docker(*, exit_code=0, bad_json=False, leaked=False, timeout=False):
+def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=False):
     reply, error = mock_reply(_request_for(SHA), SHA, _CONTROLLER_CHECKOUT)
     assert error is None, error
     calls = []
@@ -29,7 +29,7 @@ def stub_docker(*, exit_code=0, bad_json=False, leaked=False, timeout=False):
         if argv[1:3] == [ "image", "inspect" ]:
             return completed(stdout="sha256:" + "b" * 64 + "\n")
         if argv[1] == "run":
-            if timeout:
+            if simulate_timeout:
                 raise subprocess.TimeoutExpired(argv, 3)
             return completed(exit_code, "{garbage" if bad_json else json.dumps(reply)+"\n")
         if argv[1:3] == ["rm", "-f"]:
@@ -96,12 +96,11 @@ class IsolatedWorkerS008Tests(unittest.TestCase):
         self.assertTrue(any(x[1:3]==("ps","-a") for x in calls))
 
     def test_failed_guest_or_malformed_stdout_does_not_pass(self):
-        for kwargs in ({"exit_code":1},{"bad_json":True},{"timeout":True}):
+        for kwargs in ({"exit_code":1},{"bad_json":True},{"simulate_timeout":True}):
             fn,calls=stub_docker(**kwargs)
-            with self.subTest(kwargs=kwargs), (
-                patch("foundry.isolated_worker._docker_available", return_value=True),
-                patch("foundry.isolated_worker._run", side_effect=fn)
-            ):
+            with (self.subTest(kwargs=kwargs),
+                  patch("foundry.isolated_worker._docker_available", return_value=True),
+                  patch("foundry.isolated_worker._run", side_effect=fn)):
                 self.blocked(run_isolated_handoff(_request_for(SHA),SHA,_CONTROLLER_CHECKOUT))
             self.assertTrue(any(x[1:3]==("rm","-f") for x in calls))
 
