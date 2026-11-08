@@ -1,0 +1,45 @@
+name: OpDB weekly literature radar
+on:
+  schedule:
+    - cron: '17 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opdb-literature-radar
+  cancel-in-progress: false
+
+jobs:
+  bibliography:
+    if: github.repository == 'mel2003ru-code/OpDB'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline parser regression tests
+        run: python -m unittest discover -s tests -p 'test_literature_radar.py' -v
+      - name: Fetch recent publication metadata
+        run: python -m research.literature --days 120 --json literature-radar.json --markdown literature-radar.md
+      - name: Publish report in workflow summary
+        if: always()
+        shell: bash
+        run: |
+          if test -f literature-radar.md; then cat literature-radar.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Preserve source metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opdb-literature-radar
+          path: |
+            literature-radar.json
+            literature-radar.md
+          if-no-files-found: ignore
+          retention-days: 14
