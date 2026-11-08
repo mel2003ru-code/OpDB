@@ -259,3 +259,23 @@ of a review request; then conduct independent Safety/Quality. The
 assistant must open a new bounded approved work queue or request the
 owner's approval to extend scope rather than silently treating DONE as
 permission to self-launch or bypass CI.
+
+
+## S-011 — exact-step CI observation hardening (draft, not executed)
+
+An exported GitHub workflow `conclusion=success` and a job with
+`runner_id>0` are insufficient to report `PASS` if the actual reviewed
+regression steps were skipped or absent. `foundry/github_snapshot.py` now
+requires explicitly successful steps by **exact name** for each of the three
+known Foundry workflows, while allowing unrelated optional steps to be skipped.
+A job that reports success despite failed/omitted mandatory tests is
+`UNKNOWN`, never `PASS`. An executed failure stays a blocker; `runner_id=0`
+and `steps=[]` stay `NO_RUNNER` and do not become test failures.
+
+Negative-control cases are added in `tests/test_github_snapshot.py`.
+These tests are **NOT YET EXECUTED** on the new PR HEAD while GitHub-hosted
+runners are unavailable. This is only a PR-controlled, unauthenticated parsing
+layer: forged GitHub exports, rewritten workflow step labels, or intentional
+`continue-on-error` configurations still require independent review and
+cannot grant execution, merge, Lens or release permissions. The scheduler
+must inspect live GitHub run/job steps independently before making any claim.
