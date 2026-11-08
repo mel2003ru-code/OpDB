@@ -23,8 +23,8 @@ def baseline(image, fixture, *, budget_seconds=12):
     return {"state": "OBSERVED_FIXED_PROBE_PASS", "image_digest": DIGEST}
 
 def negatives(argv, timeout):
-    removed = [(name, guard, check) for name, guard, check in CONTROLS
-               if guard not in argv]
+    removed = [(name, guards, check) for name, guards, check in CONTROLS
+               if all(guard not in argv for guard in guards)]
     if len(removed) != 1:
         raise AssertionError("Exactly one guard must be removed")
     checks = {name: True for name in EXPECTED}
