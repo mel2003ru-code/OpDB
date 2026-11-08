@@ -92,6 +92,17 @@ class GitHubSnapshotTests(unittest.TestCase):
         self.assertEqual(result["ci_state"], "PASS")
         self.assertFalse(result["ci_attested"])
 
+    def test_contradicting_run_and_job_conclusions_not_green(self):
+        payload = sample()
+        payload["runs"][0]["conclusion"] = "success"
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "UNKNOWN")
+        payload = sample()
+        payload["jobs"]["900"] = [{
+            "run_id": 900, "runner_id": 123,
+            "steps": [{"name": "tests"}], "conclusion": "success",
+        }]
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "UNKNOWN")
+
     def test_unknown_without_job_rows(self):
         payload = sample()
         payload["jobs"] = {}
