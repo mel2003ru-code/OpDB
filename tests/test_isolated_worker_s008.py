@@ -20,7 +20,8 @@ def completed(code=0, stdout=""):
     return subprocess.CompletedProcess([DOCKER], code, stdout, "")
 
 
-def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=False):
+def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=False,
+                bad_check=False, fake_launch=False, duplicate_json=False):
     reply, error = mock_reply(_request_for(SHA), SHA, _CONTROLLER_CHECKOUT)
     assert error is None, error
     report = {
@@ -34,6 +35,10 @@ def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=F
         "trusted_controller_attested": False,
         "launch_authorized": False,
     }
+    if bad_check:
+        report["checked"]["shm_8m"] = False
+    if fake_launch:
+        report["launch_authorized"] = True
     calls = []
     def invoke(argv, *, timeout):
         calls.append(tuple(argv))
@@ -42,7 +47,9 @@ def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=F
         if argv[1] == "run":
             if simulate_timeout:
                 raise subprocess.TimeoutExpired(argv, 3)
-            return completed(exit_code, "{garbage" if bad_json else json.dumps(report)+"\n")
+            return completed(exit_code, "{garbage" if bad_json else
+                '{"probe":"fake","probe":"fixed-data-only-handoff-s008"}' if duplicate_json else
+                json.dumps(report)+"\n")
         if argv[1:3] == ["rm", "-f"]:
             return completed()
         if argv[1:3] == ["ps", "-a"]:
@@ -107,7 +114,8 @@ class IsolatedWorkerS008Tests(unittest.TestCase):
         self.assertTrue(any(x[1:3]==("ps","-a") for x in calls))
 
     def test_failed_guest_or_malformed_stdout_does_not_pass(self):
-        for kwargs in ({"exit_code":1},{"bad_json":True},{"simulate_timeout":True}):
+        for kwargs in ({"exit_code":1},{"bad_json":True},{"simulate_timeout":True},
+                       {"bad_check":True},{"fake_launch":True},{"duplicate_json":True}):
             fn,calls=stub_docker(**kwargs)
             with (self.subTest(kwargs=kwargs),
                   patch("foundry.isolated_worker._docker_available", return_value=True),
