@@ -75,7 +75,8 @@ def evaluate(evidence):
     """Pure decision function; no automatic release path in any state."""
     if evidence is None:
         return _decision("NOT_CONFIGURED", ["No admitted OpDB evidence"])
-    if not isinstance(evidence, dict) or evidence.get("schema_version") != 1:
+    if (not isinstance(evidence, dict) or type(evidence.get("schema_version")) is not int
+            or evidence["schema_version"] != 1):
         return _decision("BLOCKED", ["Unsupported or malformed evidence schema"])
     candidate_sha = evidence.get("candidate_sha")
     if not _hex(candidate_sha, 40):
@@ -118,15 +119,24 @@ def evaluate(evidence):
     expected = {(p, w) for p in PEERS for w in WORKLOADS}
     observed = {}
     hardware = set()
+    workload_inputs = {}
+    if len(rows) > len(expected):
+        return _decision("NOT_VERIFIED", ["More rows than unique expected workload pairs"])
     for row in rows:
         if not isinstance(row, dict):
             return _decision("NOT_VERIFIED", ["Malformed benchmark row"])
-        key = (row.get("peer"), row.get("workload"))
+        if type(row.get("peer")) is not str or type(row.get("workload")) is not str:
+            return _decision("NOT_VERIFIED", ["Malformed peer or workload identity"])
+        key = (row["peer"], row["workload"])
         if key not in expected or key in observed:
             return _decision("NOT_VERIFIED", ["Unknown or repeated benchmark pair"])
         problem = _validate_row(row)
         if problem:
             return _decision("NOT_VERIFIED", [str(key) + ": " + problem])
+        fingerprint = (row["dataset_sha256"], tuple(row["trial_seeds"]))
+        prior = workload_inputs.setdefault(row["workload"], fingerprint)
+        if prior != fingerprint:
+            return _decision("NOT_VERIFIED", ["Dataset or paired trial seeds differ across peers for " + row["workload"]])
         observed[key] = row
         hardware.add(row["hardware_fingerprint"])
     if set(observed) != expected:
