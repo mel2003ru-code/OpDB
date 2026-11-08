@@ -23,6 +23,40 @@ WORKFLOWS = (
 )
 PR_NUMBERS = (32, 33, 34)
 ISSUE_NUMBERS = (21, 31)
+# A successful GitHub job alone is not evidence a required test step ran.
+# These names match reviewed workflow definitions at this stage. PR-controlled
+# YAML and exported REST JSON remain untrusted; this is only a fail-closed filter.
+REQUIRED_CI_STEPS = {
+    WORKFLOWS[0]: (
+        "Run all repository unit tests, including bounded SQLite research probes",
+    ),
+    WORKFLOWS[1]: (
+        "Exercise negative and synthetic victory cases",
+        "Verify agent model policy rejects every paid inference path",
+        "Explicitly forbid launch until real authenticated release evidence",
+    ),
+    WORKFLOWS[2]: (
+        "Validate safe planning and synthetic failure guards",
+        "Execute ONLY fixed reviewed confinement fixture in a real container",
+        "S-008 isolated fixed handoff — tests and actual Docker observation",
+    ),
+}
+
+
+def _required_steps_passed(workflow_name, steps):
+    """False-green barrier: every required step must have explicit success."""
+    required = REQUIRED_CI_STEPS.get(workflow_name)
+    if not required or type(steps) is not list or not steps:
+        return False
+    observed = {}
+    for step in steps:
+        if (type(step) is not dict or type(step.get("name")) is not str
+                or type(step.get("conclusion")) is not str
+                or step["name"] in observed
+                or step["conclusion"] not in ("success", "skipped")):
+            return False
+        observed[step["name"]] = step["conclusion"]
+    return all(observed.get(name) == "success" for name in required)
 
 
 def _blocked(reason):
@@ -80,7 +114,12 @@ def _job_status(run, data):
         if rid == 0 and len(steps) == 0 and conclusion == "failure":
             observed.append("NO_RUNNER")
         elif rid > 0 and steps and conclusion == "success":
-            observed.append("PASS")
+            # Do not accept setup-only jobs or jobs that skipped the real
+            # regressions, even when GitHub reports conclusion=success.
+            observed.append(
+                "PASS" if _required_steps_passed(run.get("name"), steps)
+                else "UNKNOWN"
+            )
         elif rid > 0 and steps and conclusion == "failure":
             observed.append("FAIL_EXECUTED")
         else:

@@ -5,7 +5,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from foundry.github_snapshot import _load, main, snapshot, WORKFLOWS
+from foundry.github_snapshot import (
+    _load, main, snapshot, WORKFLOWS, REQUIRED_CI_STEPS
+)
 
 PR_HEAD = "a" * 40
 MAIN_HEAD = "b" * 40
@@ -85,12 +87,59 @@ class GitHubSnapshotTests(unittest.TestCase):
             run["conclusion"] = "success"
             payload["jobs"][str(run["id"])] = [{
                 "run_id": run["id"], "runner_id": 250,
-                "steps": [{"name": "tests", "conclusion": "success"}],
+                "steps": [
+                    {"name": step, "conclusion": "success"}
+                    for step in REQUIRED_CI_STEPS[run["name"]]
+                ],
                 "conclusion": "success",
             }]
         result = snapshot(payload, PR_HEAD)
         self.assertEqual(result["ci_state"], "PASS")
         self.assertFalse(result["ci_attested"])
+
+    def test_successful_job_without_required_tests_is_not_green(self):
+        payload = sample()
+        for run in payload["runs"]:
+            run["conclusion"] = "success"
+            payload["jobs"][str(run["id"])] = [{
+                "run_id": run["id"], "runner_id": 123,
+                "steps": [{"name": "Set up job", "conclusion": "success"}],
+                "conclusion": "success",
+            }]
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "UNKNOWN")
+
+    def test_failed_or_skipped_required_test_never_counts_as_pass(self):
+        for conclusion in ("failure", "skipped", "cancelled", None):
+            with self.subTest(conclusion=conclusion):
+                payload = sample()
+                for run in payload["runs"]:
+                    run["conclusion"] = "success"
+                    payload["jobs"][str(run["id"])] = [{
+                        "run_id": run["id"], "runner_id": 123,
+                        "steps": [
+                            {"name": name,
+                             "conclusion": (conclusion if i == 0 else "success")}
+                            for i, name in enumerate(
+                                REQUIRED_CI_STEPS[run["name"]]
+                            )
+                        ],
+                        "conclusion": "success",
+                    }]
+                self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "UNKNOWN")
+
+    def test_optional_skipped_step_is_not_an_automatic_failure(self):
+        payload = sample()
+        for run in payload["runs"]:
+            run["conclusion"] = "success"
+            payload["jobs"][str(run["id"])] = [{
+                "run_id": run["id"], "runner_id": 123,
+                "steps": [
+                    {"name": name, "conclusion": "success"}
+                    for name in REQUIRED_CI_STEPS[run["name"]]
+                ] + [{"name": "Optional no-op", "conclusion": "skipped"}],
+                "conclusion": "success",
+            }]
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "PASS")
 
     def test_contradicting_run_and_job_conclusions_not_green(self):
         payload = sample()
