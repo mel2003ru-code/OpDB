@@ -67,6 +67,33 @@ def _digest(rows: tuple[tuple[str, bytes], ...]) -> str:
         digest.update(value)
     return digest.hexdigest()
 
+class SourceIntegrityError(RuntimeError):
+    """Underlying SQLite source row violates the typed KV read contract."""
+
+
+def _source_row(row: tuple) -> tuple[str, bytes]:
+    """Reject unexpected SQLite storage types without coercing integers to bytes.
+
+    The SQL read projection avoids loading external BLOBs bigger than 1 MiB;
+    row = (key, safe_blob_or_null, sqlite_typeof, sqlite_length).
+    This guards the Core API but does NOT authenticate a privileged writer.
+    """
+    key, value, storage, size = row
+    if type(key) is not str:
+        raise SourceIntegrityError("invalid source key: not UTF-8 text")
+    try:
+        _key(key)
+    except ValueError as exc:
+        raise SourceIntegrityError("invalid source key: outside typed KV contract") from exc
+    if storage != "blob":
+        raise SourceIntegrityError("non-BLOB source value; refuse unsafe conversion")
+    if type(size) is not int or size < 0 or size > MAX_VALUE_BYTES:
+        raise SourceIntegrityError("oversized or malformed source BLOB")
+    if type(value) is not bytes or len(value) != size:
+        raise SourceIntegrityError("invalid source BLOB representation")
+    return key, value
+
+
 class TruthStore:
     """Single-process research API. SQLite remains authoritative.
 
@@ -177,9 +204,12 @@ class TruthStore:
         with self._lock:
             self._ensure_open()
             result = self._db.execute(
-                "SELECT v FROM opdb_source_kv WHERE k=?", (key,)
+                "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
+                "THEN v ELSE NULL END, typeof(v), length(v) "
+                "FROM opdb_source_kv WHERE k=?",
+                (MAX_VALUE_BYTES, key),
             ).fetchone()
-        return bytes(result[0]) if result else None
+        return _source_row(result)[1] if result is not None else None
 
     def scan(self, prefix: str = "", limit: int = MAX_SCAN) -> tuple[tuple[str, bytes], ...]:
         prefix = _key(prefix, allow_empty=True)
@@ -188,12 +218,14 @@ class TruthStore:
         with self._lock:
             self._ensure_open()
             rows = self._db.execute(
-                "SELECT k,v FROM opdb_source_kv "
+                "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
+                "THEN v ELSE NULL END, typeof(v), length(v) "
+                "FROM opdb_source_kv "
                 "WHERE substr(k,1,length(?))=? COLLATE BINARY "
                 "ORDER BY k COLLATE BINARY LIMIT ?",
-                (prefix, prefix, limit),
+                (MAX_VALUE_BYTES, prefix, prefix, limit),
             ).fetchall()
-        return tuple((row[0], bytes(row[1])) for row in rows)
+        return tuple(_source_row(row) for row in rows)
 
     def snapshot(self) -> SourceSnapshot:
         """Rows are observed in one SQLite read transaction.
@@ -206,9 +238,12 @@ class TruthStore:
             self._db.execute("BEGIN")
             try:
                 rows = tuple(
-                    (key, bytes(value)) for key, value in self._db.execute(
-                        "SELECT k,v FROM opdb_source_kv ORDER BY k COLLATE BINARY"
-                    ).fetchall()
+                    _source_row(row) for row in self._db.execute(
+                        "SELECT k, CASE WHEN typeof(v)='blob' AND length(v)<=? "
+                        "THEN v ELSE NULL END, typeof(v), length(v) "
+                        "FROM opdb_source_kv ORDER BY k COLLATE BINARY",
+                        (MAX_VALUE_BYTES,),
+                    )
                 )
             finally:
                 self._db.execute("ROLLBACK")
