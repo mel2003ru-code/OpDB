@@ -43,6 +43,14 @@ class ResearchCycleTests(unittest.TestCase):
         self.assertLessEqual(tail["p95_us"], tail["p99_us"])
         self.assertLessEqual(tail["p99_us"], tail["max_us"])
 
+    def test_p0_negative_controls_are_expected_not_safety_pass(self):
+        report = run_cycle(20261108)
+        self.assertEqual(len(report["negative_controls"]), 1)
+        control = report["negative_controls"][0]
+        self.assertEqual(control["status"], "EXPECTED_COUNTEREXAMPLE")
+        self.assertTrue(control["external_untracked_stale"])
+        self.assertTrue(control["forged_journal_mismatch"])
+
     def test_failed_tracks_never_count_as_pass(self):
         by_track = {r["track"]: r for r in run_cycle(5)["results"]}
         self.assertEqual(sum(r["status"].endswith("_PASS") for r in by_track.values()), 10)
