@@ -129,6 +129,14 @@ class AutomationLedgerTests(unittest.TestCase):
         self.assertEqual(reconcile(done, queue("DONE", LINK_B))["state"],
                          "CONSISTENT_ADVISORY")
 
+    def test_reconciliation_rejects_foreign_worklist(self):
+        item = queue()
+        item["repository"] = "attacker/OpDB"
+        self.assertEqual(reconcile(seeded(), item)["state"], "HOLD_SYNC")
+        item = queue()
+        item["security_blocker"] = 22
+        self.assertEqual(reconcile(seeded(), item)["state"], "HOLD_SYNC")
+
     def test_wrong_evidence_and_overlong_ledger_refused(self):
         led = seeded()
         for link in ("https://github.com/other/OpDB/commit/" + "f" * 40,
