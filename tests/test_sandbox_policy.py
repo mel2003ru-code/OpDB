@@ -90,6 +90,20 @@ class SandboxPolicyTests(unittest.TestCase):
             link.symlink_to(_FIXTURE, target_is_directory=True)
             self.assertEqual(plan(IMAGE, link)["state"], "BLOCKED")
 
+    def test_lookalike_fixture_directory_denied(self):
+        """A stranger can supply identical filenames but different executable bytes."""
+        with tempfile.TemporaryDirectory(prefix="untrusted-fixture-") as tmp:
+            for filename in ("calculator.py", "quality_probe.py",
+                             "sandbox_runtime_probe.py",
+                             "sandbox_adversarial_probe.py"):
+                (Path(tmp) / filename).write_text(
+                    "raise RuntimeError('unreviewed code')\n", encoding="utf-8")
+            for probe in ("quality", "confinement", "adversarial"):
+                with self.subTest(probe=probe):
+                    verdict = plan(IMAGE, tmp, probe=probe)
+                    self.assertEqual(verdict["state"], "BLOCKED",
+                                     "Unreviewed path must not be mounted")
+
     def test_no_fixture_files_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(plan(IMAGE, tmp)["state"], "BLOCKED")
