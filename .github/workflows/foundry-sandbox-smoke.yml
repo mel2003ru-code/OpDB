@@ -115,7 +115,7 @@ jobs:
           assert report["launch_authorized"] is False
           print("EXPECTED_NEGATIVE_CONTROLS: network, UID, memory detected")
           PY
-      - name: Preserve evidence in immutable CI log while Actions artifact quota is exhausted
+      - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
         if: always()
         shell: bash
         run: |
