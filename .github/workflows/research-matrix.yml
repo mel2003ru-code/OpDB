@@ -1,0 +1,55 @@
+name: OpDB weekly cross-runtime research matrix
+on:
+  schedule:
+    - cron: '49 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opdb-research-matrix
+  cancel-in-progress: false
+
+jobs:
+  cross-runtime:
+    if: github.repository == 'mel2003ru-code/OpDB'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.11'
+          - os: ubuntu-latest
+            python: '3.13'
+          - os: windows-latest
+            python: '3.13'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit and research harness tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Independently reproduce four seeded cycles
+        shell: bash
+        run: |
+          mkdir -p research-results
+          for seed in 20261108 20261109 20261110 20261111; do
+            python -m research.cycle --seed "$seed" --output "research-results/seed-${seed}.json"
+          done
+      - name: Upload exact environment/result records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-matrix-${{ matrix.os }}-py${{ matrix.python }}
+          path: research-results/*.json
+          retention-days: 14
+          if-no-files-found: ignore
