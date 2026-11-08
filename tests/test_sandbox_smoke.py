@@ -154,6 +154,20 @@ class SyntheticSandboxOrchestrationTests(unittest.TestCase):
         self.assertEqual(result["state"], "BLOCKED")
         self.safe(result)
 
+    def test_unreviewed_lookalike_directory_must_never_call_docker(self):
+        """The CLI fixture argument MUST NOT select arbitrary Python to execute."""
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="unreviewed-smoke-") as tmp:
+            for filename in ("calculator.py", "quality_probe.py",
+                             "sandbox_runtime_probe.py"):
+                (Path(tmp) / filename).write_text(
+                    "raise RuntimeError('unreviewed guest')\n", encoding="utf-8")
+            with patch("foundry.sandbox_smoke._run",
+                       side_effect=AssertionError("unreviewed Docker execution")):
+                verdict = smoke(IMAGE, tmp)
+            self.assertEqual(verdict["state"], "BLOCKED")
+            self.safe(verdict)
+
     def test_missing_fixture_never_calls_docker(self):
         with patch("foundry.sandbox_smoke._run",
                    side_effect=AssertionError("Docker invoked")):
