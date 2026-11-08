@@ -5,6 +5,9 @@ on:
     paths:
       - 'foundry/sandbox*.py'
       - 'foundry/fixtures/sandbox_runtime_probe.py'
+      - 'foundry/fixtures/handoff_worker.py'
+      - 'foundry/isolated_worker.py'
+      - 'tests/test_isolated_worker_s008.py'
       - 'tests/test_sandbox_smoke.py'
       - 'tests/test_sandbox_policy.py'
       - 'tests/test_sandbox_negative.py'
@@ -167,6 +170,42 @@ jobs:
               assert not report["production_allowed"]
               assert not report["launch_authorized"]
           PY
+      - name: S-008 isolated fixed handoff — tests and actual Docker observation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_isolated_worker_s008
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from foundry.worker_contract import _request_for
+          Path("s008-request.json").write_text(
+              json.dumps(_request_for(os.environ["GITHUB_SHA"]))+"\\n",
+              encoding="utf-8"
+          )
+          PY
+          python -m foundry.isolated_worker \\
+            --request-file s008-request.json \\
+            --expected-sha "$GITHUB_SHA" \\
+            --checkout "$GITHUB_WORKSPACE" \\
+            --output s008-isolation-evidence.json
+          python - <<'PY'
+          import json
+          r=json.load(open("s008-isolation-evidence.json",encoding="utf-8"))
+          assert r["state"] == "ISOLATED_REVIEW_ONLY", r
+          assert r["os_worker_restrictions_observed"] is True
+          assert r["review"]["state"] == "REVIEW_ONLY_PATCH"
+          assert r["review"]["human_review_required"] is True
+          assert r["trusted_controller_attested"] is False
+          assert r["arbitrary_model_code_executed"] is False
+          assert r["model_invoked"] is False
+          assert r["github_write_allowed"] is False
+          assert r["production_allowed"] is False
+          assert r["automatic_merge_allowed"] is False
+          assert r["launch_authorized"] is False
+          print("S008_FIXED_GUEST_OBSERVED; independent trusted controller NOT ATTESTED")
+          PY
+          git diff --exit-code
       - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
         if: always()
         shell: bash
