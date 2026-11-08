@@ -16,6 +16,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from .probes_extended import EXTENDED_PROBES, MODEL_TRACKS
+
 TRACKS = [(f"R{i:02d}", i + 6) for i in range(1, 11)] + [
     ("TASK-001", 2), ("TASK-002", 3), ("TASK-003", 4)
 ]
@@ -148,6 +150,7 @@ def probe_metamorphic_sql(seed):
 
 
 PROBES = {"R03": probe_dynamic_index, "R07": probe_sqlite_crash, "R10": probe_metamorphic_sql}
+PROBES.update(EXTENDED_PROBES)
 
 
 def run_cycle(seed):
@@ -166,7 +169,8 @@ def run_cycle(seed):
         try:
             detail = probe(local_seed)
             results.append({
-                "track": track, "issue": issue, "status": "SQLITE_SMOKE_PASS",
+                "track": track, "issue": issue,
+                "status": "MODEL_SMOKE_PASS" if track in MODEL_TRACKS else "SQLITE_SMOKE_PASS",
                 "seed": local_seed, "elapsed_s": round(time.perf_counter() - t0, 6),
                 **detail
             })
@@ -183,7 +187,7 @@ def run_cycle(seed):
         "python": sys.version.split()[0],
         "sqlite": sqlite3.sqlite_version,
         "platform": platform.platform(),
-        "disclaimer": "All probes are SQLite/Python smoke tests, not autonomous AI research and not an OpDB engine",
+        "disclaimer": "R01-R10 are limited SQLite/Python or synthetic-model probes; TASK-001/002/003 are NOT_CONFIGURED; no autonomous AI research or independent OpDB engine claim",
         "results": results
     }
 
