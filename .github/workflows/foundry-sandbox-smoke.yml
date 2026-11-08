@@ -7,6 +7,7 @@ on:
       - 'foundry/fixtures/sandbox_runtime_probe.py'
       - 'tests/test_sandbox_smoke.py'
       - 'tests/test_sandbox_policy.py'
+      - 'tests/test_sandbox_negative.py'
       - '.github/workflows/foundry-sandbox-smoke.yml'
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validate safe planning and synthetic failure guards
-        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_smoke
+        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_smoke tests.test_sandbox_negative
       - name: Confirm disposable Docker daemon available
         shell: bash
         run: |
@@ -88,6 +89,31 @@ jobs:
           assert report["checked"]["root_filesystem_read_only"] is False
           assert report["checked"]["network_only_loopback"] is True
           print("EXPECTED_NEGATIVE_CONTROL: removing --read-only was detected")
+          PY
+      - name: Three real negative controls — network, non-root UID and memory budget
+        shell: bash
+        run: |
+          python -m foundry.sandbox_negative \
+            --image "$OPDB_TEST_IMAGE" \
+            --fixture "$GITHUB_WORKSPACE/foundry/fixtures" \
+            --output sandbox-negative-evidence.json
+          python - <<'PY'
+          import json
+          with open("sandbox-negative-evidence.json", encoding="utf-8") as handle:
+              report=json.load(handle)
+          assert report["state"] == "EXPECTED_FAILURES_OBSERVED"
+          assert report["expected_failures_observed"] is True
+          assert set(report["negative_controls"]) == {"network", "non_root", "memory"}
+          for value in report["negative_controls"].values():
+              assert value["detected_unsafe"] is True
+              assert value["guest_exit_nonzero"] is True
+          assert report["untrusted_model_code_allowed"] is False
+          assert report["candidate_executed"] is False
+          assert report["github_write_allowed"] is False
+          assert report["automatic_merge_allowed"] is False
+          assert report["production_allowed"] is False
+          assert report["launch_authorized"] is False
+          print("EXPECTED_NEGATIVE_CONTROLS: network, UID, memory detected")
           PY
       - name: Confirm source checkout remains unmodified
         run: git diff --exit-code
