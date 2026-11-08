@@ -57,8 +57,12 @@ jobs:
             });
             const openPrs = prs.slice(0,25).map(p=>"- [#"+p.number+" "+p.title+"]("+p.html_url+")"+
               (p.draft ? " — черновик" : " — ожидает ревью"));
-            const failures = runs.filter(r=>["failure","timed_out","action_required"].includes(r.conclusion));
-            const pending = runs.filter(r=>r.status!=="completed");
+            // Ignore historical failures from branches which are no longer open PRs.
+            // 'main' plus exact heads of currently open PRs are the relevant scope.
+            const activePrHeads = new Set(prs.map(p=>p.head.sha));
+            const relevant = runs.filter(r=>r.head_branch==="main" || activePrHeads.has(r.head_sha));
+            const failures = relevant.filter(r=>["failure","timed_out","action_required"].includes(r.conclusion));
+            const pending = relevant.filter(r=>r.status!=="completed");
             const ciText = failures.length
               ? failures.slice(0,12).map(r=>"- "+r.name+" — "+r.conclusion+" ([проверка]("+r.html_url+"))")
               : ["- В последних 30 полученных запусках нет зафиксированного завершения с ошибкой."];
@@ -81,7 +85,7 @@ jobs:
               "",
               ...(openPrs.length ? openPrs : ["- Нет открытых PR."]),
               "",
-              "### CI — ошибки и ожидание",
+              "### Актуальные CI — основная ветка и открытые PR",
               "",
               ...ciText,
               "",
