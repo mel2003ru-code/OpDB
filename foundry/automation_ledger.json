@@ -17,9 +17,18 @@
       "seq": 2,
       "state": "CLAIMED",
       "task_id": "FND-009B"
+    },
+    {
+      "event_sha256": "32fd02ef1bf1d5e3ec1a466b455eb157d74f827598ab0a3866d9994d28a42034",
+      "evidence_url": "https://github.com/mel2003ru-code/OpDB/commit/077af4c7b185dde4e0c83a7e74d5871f3a10d616",
+      "observed_sha": "077af4c7b185dde4e0c83a7e74d5871f3a10d616",
+      "prev_sha256": "e53a12a5be08425200a6e1f7e29e5af2b30594295b83d8e906a0421197b94226",
+      "seq": 3,
+      "state": "DONE",
+      "task_id": "FND-009B"
     }
   ],
-  "head_sha256": "e53a12a5be08425200a6e1f7e29e5af2b30594295b83d8e906a0421197b94226",
+  "head_sha256": "32fd02ef1bf1d5e3ec1a466b455eb157d74f827598ab0a3866d9994d28a42034",
   "issue_number": 31,
   "pr_number": 32,
   "repository": "mel2003ru-code/OpDB",
