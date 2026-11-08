@@ -34,6 +34,21 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Run independent configured SQLite checks
         run: python -m research.cycle --output research-cycle.json
+      - name: Route one bounded next research step (no code or production writes)
+        if: always()
+        shell: bash
+        run: |
+          python -m foundry.loop --research research-cycle.json --expected-sha "$GITHUB_SHA" --output foundry-next-step.json
+      - name: Keep routing evidence in logs
+        if: always()
+        shell: bash
+        run: |
+          if [ -s foundry-next-step.json ]; then
+            echo "Foundry decision (NOT an autonomous code change):"
+            cat foundry-next-step.json
+          else
+            echo "No valid Foundry plan available: hold; do not claim progress"
+          fi
       - name: Retain complete evidence in GitHub Actions logs, no artifact quota
         if: always()
         shell: bash
@@ -74,6 +89,10 @@ jobs:
               '| ['+x.track+'](https://github.com/'+owner+'/'+repo+'/issues/'+x.issue+') | '+
               x.status+' | '+(x.assertions ?? '—')+' | '+String(x.scope || x.reason || x.error || '—').replaceAll('|','/').replaceAll('\n',' ')+' |'
             );
+            const planPath = 'foundry-next-step.json';
+            const plan = fs.existsSync(planPath) ?
+              JSON.parse(fs.readFileSync(planPath, 'utf8')) :
+              {state:'HOLD_EVIDENCE',next_issue:31,proposed_next_action:'Inspect missing decision'};
             const negative = report.negative_controls || [];
             const negativeRows = negative.map(x=>"- **"+x.status+"** — "+
               String(x.scope || x.error || "No evidence").replaceAll("\n"," ").replaceAll("|","/"));
@@ -101,6 +120,12 @@ jobs:
               '',
               'EXPECTED_COUNTEREXAMPLE означает обнаруженную ошибку в намеренно небезопасной модели,',
               'а не проверенную защиту OpDB. Issue #21 остаётся блокирующим.',
+              '',
+              '### Foundry: безопасная рекомендация следующего шага',
+              '',
+              '- Состояние: **'+plan.state+'**; задача #'+String(plan.next_issue||31)+'.',
+              '- Следующее действие: '+String(plan.proposed_next_action||'Остановить цикл').replaceAll('|','/').replaceAll('\\n',' '),
+              '- Только рекомендация: автоматическое исправление кода, merge и production отключены.',
               '',
               'Полный машиночитаемый JSON находится в журнале этого запуска GitHub Actions; ',
               'в Actions storage ничего не загружается из-за исчерпанной квоты.',
