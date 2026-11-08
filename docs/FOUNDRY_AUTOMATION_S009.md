@@ -77,3 +77,45 @@ production readiness, worker admission, merge, or launch permission.
 
 This stage establishes a work-selection mechanism; it does not certify the
 security or functional quality of later automated edits.
+
+
+## S-009A: GitHub snapshot reader (reviewable draft)
+
+`foundry/github_snapshot.py` now consumes one bounded JSON export (<=256 KiB)
+of live GitHub REST responses, using `--expected-sha` to pin PR #32. The
+format is `schema_version: 1`, `repository: {full_name}`, `main` (branch
+metadata), `pulls` (#32, #33, #34), `issues` (#21, #31), `runs` (up to 30
+workflow-run summaries), and `jobs` (mapping of string run IDs to job arrays
+with their `runner_id`, `conclusion`, `steps`, `run_id`). Only these
+read-only data fields are accepted; no issue text becomes executable instructions.
+
+The separate scheduled assistant retrieves **current** data using its connected
+GitHub integration, without supplying a GitHub credential to this PR-controlled
+parser. This parser does **not** itself log in, access network, or fetch GitHub.
+The input is untrusted and its SHA-256 digest is only an equality fingerprint,
+NOT a signed attestation.
+
+The parser rejects mismatched main/base/PR-head SHAs and stale or unstacked
+PR #34. It distinguishes a completed failed GitHub job with zero steps and
+`runner_id=0` (`NO_RUNNER`) from a job that actually ran and failed
+(`FAIL_EXECUTED`). A reported PASS is *still unauthenticated* and cannot grant
+worker, GitHub write, Lens, launch, or merge authority.
+
+```bash
+python -m foundry.github_snapshot \
+  --input exported-github-rest.json \
+  --expected-sha <CURRENT_PR32_HEAD_SHA> \
+  --output untrusted-advisory-snapshot.json
+python -m unittest -v tests.test_github_snapshot
+```
+
+S-009A is **implemented in draft form**, NOT independently accepted; the work
+queue's `DONE` means *reviewable code exists*, not CI GREEN or signed review.
+The actual GitHub Actions runner allocation is currently blocked: check
+individual job logs/steps rather than treating a failure-with-no-runner as
+evidence of a test failing. No alternate or additional expensive CI workflow
+is permitted merely to produce a green badge.
+
+Next: FND-009B must use this bounded snapshot and a durable idempotency record
+to avoid repeating already-completed engineering tasks; it must not promote
+unauthenticated review results into an execution capability.
