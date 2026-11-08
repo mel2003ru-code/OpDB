@@ -243,11 +243,59 @@ jobs:
                   assert alive.returncode==0 and not alive.stdout.strip(), (
                       "Negative probe container cleanup not confirmed")
           PY
+      - name: S-008B real negative control — guest must refuse missing session nonce
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, secrets
+          from foundry.sandbox_policy import _REVIEWED_FIXTURE, plan
+          from foundry.sandbox_runner import DOCKER, PINNED_IMAGE, _run
+          from foundry.worker_contract import _request_for
+          sha = os.environ["GITHUB_SHA"]
+          digest = hashlib.sha256(json.dumps(
+              _request_for(sha), sort_keys=True, separators=(",", ":")
+          ).encode("ascii")).hexdigest()
+          policy = plan(PINNED_IMAGE, _REVIEWED_FIXTURE, 12, probe="handoff")
+          assert policy["state"] == "POLICY_PLAN_ONLY", policy
+          argv = list(policy["command_argv"])
+          name = "opdb-s008b-missing-nonce-" + secrets.token_hex(8)
+          position = argv.index(PINNED_IMAGE)
+          argv[0] = DOCKER
+          argv[position:position] = [
+              "--name=" + name,
+              "--env=OPDB_SOURCE_SHA=" + sha,
+              "--env=OPDB_REQUEST_SHA256=" + digest,
+              # Deliberately omit OPDB_SESSION_NONCE.
+          ]
+          try:
+              result = _run(argv, timeout=25)
+              report = json.loads(result.stdout.strip())
+              assert result.returncode != 0, report
+              assert report["probe"] == "fixed-data-only-handoff-s008"
+              assert report["session_nonce"] == ""
+              assert report["request_sha256"] == digest
+              assert report["passed"] is False
+              assert report["reply"] is None
+              assert report["checked"]["network_only_loopback"] is True
+              assert report["arbitrary_model_code_executed"] is False
+              assert report["launch_authorized"] is False
+              print("EXPECTED_S008B_NEGATIVE: missing nonce denied in actual Docker guest")
+          finally:
+              try:
+                  _run([DOCKER, "rm", "-f", name], timeout=5)
+              finally:
+                  listing = _run(
+                      [DOCKER, "ps", "-a", "--format", "{{.Names}}",
+                       "--filter", "name=^/" + name + "$"], timeout=5)
+                  assert listing.returncode == 0 and not listing.stdout.strip(), (
+                      "Missing-nonce negative probe cleanup not confirmed")
+          PY
       - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
         if: always()
         shell: bash
         run: |
-          for evidence in fixed-sandbox-evidence.json sandbox-negative-evidence.json adversarial-sandbox-evidence.json; do
+          for evidence in fixed-sandbox-evidence.json sandbox-negative-evidence.json adversarial-sandbox-evidence.json s008-isolation-evidence.json; do
             if [ -s "$evidence" ]; then
               echo "=== $evidence / source SHA $GITHUB_SHA ==="
               cat "$evidence"
