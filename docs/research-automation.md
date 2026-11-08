@@ -1,29 +1,46 @@
-# OpDB Foundry 30-minute research checks (research execution boundary)
+# OpDB Foundry — автоматизация исследований v0.3
 
-Date: 2026-11-08. Status: experimental workflow. A successful GitHub Actions run does not establish OpDB safety.
+**Дата:** 2026-11-08. **Статус:** экспериментальная инфраструктура; не готовая самостоятельная СУБД.
 
-## What actually runs every 30 minutes
+## Исполняемые проверки
 
-GitHub Actions triggers the small, isolated research checker at UTC :07 and :37. Every run enumerates 10 research areas R01-R10 and 3 engineering areas TASK-001/002/003, records an explicit status and uploads a JSON artifact and a Step Summary.
+1. **Каждые 30 минут** (`:07` и `:37` UTC): GitHub Actions запускает 10 ограниченных проб и отдельно обязательный отрицательный контроль P0. Каждая из десяти тем R01–R10 получает самостоятельную проверку SQLite или небольшой Python-модели. Данные синтетические, исходники проверяемых реализаций OpDB Core/Safety пока не подключены.
+2. **Еженедельная совместимость**: проверка фиксированных seeds на Python 3.11 и 3.13 в Ubuntu и Python 3.13 в Windows. Запуск вручную доступен из GitHub Actions. Проверяется переносимость наших SQLite/Python проб, **не** полномасштабная совместимость нового ядра.
+3. **Еженедельный научный радар**: read-only запросы к Crossref REST с метаданными публикаций по физическому дизайну, журналам/восстановлению, инкрементальным представлениям и кэшированию. Выдаёт кандидатов по DOI, а не подтверждённые научные результаты. Не скачивает статьи, не обращается к ИИ API и не делает оценочных выводов о новизне.
+4. **CI на PR**: модульные тесты исходников лаборатории и проверка схемы инженерных отчётов.
+5. **Ежедневный статус**: публикация GitHub-отчёта в Issue #17 и отдельная задача ChatGPT для общего резюме 13 направлений.
+6. **Отказы**: при сбое полчасовой проверки создаётся/обновляется не более одного уведомительного комментария в день в Issue #17, с ссылками на упавшие GitHub Actions.
 
-Currently **R03**, **R07** and **R10** contain narrowly scoped, reproducible SQLite-only probes (dynamic-index query equivalence; process-exit WAL recovery; metamorphic SUM oracle). Other areas intentionally show **NOT_CONFIGURED**. These tests do **not** implement the OpDB engine or autonomous scientific discovery. A Python/SQLite PASS is not a production correctness proof and never authorizes a merge.
+## Границы доказательств
 
-New probes must be proposed through a PR, tested independently, reviewed by Quality and admitted to the schedule from trusted main. Never execute untrusted PR code in a write-privileged scheduled runner.
+- `SQLITE_SMOKE_PASS`: модель проверена на встроенном SQLite или простой комбинации с Python-оракулом.
+- `MODEL_SMOKE_PASS`: проверена синтетическая модель политики; не фактический движок.
+- `EXPECTED_COUNTEREXAMPLE`: намеренно уязвимый Lens успешно показал устаревший результат. Это негативный контроль, а не успешная защита.
+- `NOT_CONFIGURED`: для Safety, Core или Quality пока нет принятого исполняемого адаптера реального кода.
+- `FAIL`: конкретный автоматический тест обнаружил несоответствие или сбой.
+- `NOT VERIFIED`: проверки недостаточно для утверждения свойства системы.
 
-## What does not run automatically
+**Ни один статус не является полной гарантией ACID, безопасности или превосходства OpDB над SQL-системами.**
 
-Existing ChatGPT chats cannot be executed every 30 minutes through GitHub. ChatGPT scheduled tasks have a maximum recurrence of once per hour, and an existing daily OpDB engineering autopilot remains configured until explicitly changed. GitHub CLI/API cannot wake a specific chat.
+## Приёмка исходников инженерных команд
 
-A true multi-agent research executor needs a separately provisioned model runtime/worker and authorization, with explicit budget control and API credentials if a paid external API is chosen. This workflow deliberately contains **no model API calls**, no API secrets, no branch write access, no auto-PR, no merge, no deployment and no production database connectivity.
+Safety (#2), Core (#3), Quality (#4) уже предоставили документальные отчёты и ADR-предложения. В PR #20 сопоставлены контракты; Issue #21 хранит P0 риск подделки/обхода журнала. Оригинальные ZIP байты в текущем сеансе не удалось получить. Точные исходники, лицензии зависимостей, checksum и воспроизводимые тесты должны быть помещены в отдельные проверяемые PR. До этого инженерные задачи остаются NOT_CONFIGURED для полчасового CI.
 
-## Resource controls
+## Контроль затрат и безопасности
 
-- A single bounded 5-minute job; actual short probes should finish far sooner.
-- Read-only GitHub token, no external Python packages or network requests from tests.
-- Results stored for 7 days. GitHub Actions limits for private repositories may apply.
-- GitHub cron executions can be delayed or skipped; reports must distinguish missing runs.
-- Full model-generated scientific work cannot be inferred from this heartbeat.
+- GitHub Actions на приватном репозитории используют учётные минуты; 48 полчасовых запусков ежедневно могут потреблять существенный лимит. Scheduled jobs могут задерживаться и пропускаться.
+- Лимиты jobs: 5 минут на лёгкий цикл, 12 минут на каждую конфигурацию недельной матрицы, 6 минут на научный радар.
+- Хранение JSON/Markdown артефактов: 7–14 дней. Код не пишет в производственные БД и не читает пользовательские файлы.
+- Ветка scheduled workflows: доверенный `main`; `GITHUB_TOKEN` для вычислительных задач имеет `contents: read`. Отдельный короткий job уведомления имеет `issues: write`, не содержит непроверенного кода PR.
+- Отсутствуют платные API ключи/вызовы моделей, автоматический deploy, self-merge, выпуск релизов, доступ к личным/боевым данным.
+- Статусы о работе отдельных ChatGPT-чатов появляются только после передачи публичных в рамках приватного репозитория артефактов или отчётов; GitHub не выполняет сами чаты по расписанию.
 
-## Next admission
+## Команды воспроизведения
 
-Safety, Core and Quality must deliver reviewed runnable tests, with exact seeds, independent oracle, data hashes, failure modes and performance budgets. Only then can the respective task be marked as genuinely tested.
+```sh
+python -m unittest discover -s tests -p 'test_*.py' -v
+python -m research.cycle --seed 20261108 --output research-cycle.json
+python -m research.literature --days 120 --json literature-radar.json --markdown literature-radar.md
+```
+
+Последняя команда требует доступа к Crossref; модульные тесты радара не требуют интернета.
