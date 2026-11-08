@@ -4,6 +4,7 @@ on:
     paths:
       - 'foundry/**'
       - 'tests/test_foundry_control.py'
+      - 'tests/test_foundry_loop.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -24,11 +25,27 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop
       - name: Demand explicit NOT_CONFIGURED without real evidence
         shell: bash
         run: |
           python -m foundry.control --output foundry-decision.json
           python -c 'import json; d=json.load(open("foundry-decision.json")); assert d["state"] == "NOT_CONFIGURED" and not d["production_allowed"] and not d["pause_autonomous_improvements"]'
+      - name: Run fixed-seed reference research for actual report integration
+        run: python -m research.cycle --seed 20261108 --output foundry-research.json
+      - name: Produce one deterministic safe next step from research evidence
+        shell: bash
+        run: |
+          python -m foundry.loop --research foundry-research.json --expected-sha "$GITHUB_SHA" --output foundry-next-step.json
+          python -c 'import json; p=json.load(open("foundry-next-step.json")); assert p["state"] == "REQUEST_EXECUTABLE_ADAPTER" and p["next_issue"] == 3 and not p["automatic_merge_allowed"] and not p["production_deploy_allowed"]'
+      - name: Print machine-readable plan or explicit failure
+        if: always()
+        shell: bash
+        run: |
+          if [ -s foundry-next-step.json ]; then
+            cat foundry-next-step.json
+          else
+            echo "No complete Foundry decision produced (research must not advance)"
+          fi
       - name: Explain trust boundary
         run: echo "No actual adapter verified, no external benchmark executed, no automatic release, merge or deployment."
