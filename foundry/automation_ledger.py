@@ -195,8 +195,16 @@ def reconcile(ledger, queue):
     """Worklist and receipt file must agree before advancing the scheduler."""
     try:
         states = validate(ledger)
-        if type(queue) is not dict or type(queue.get("items")) is not list:
-            raise ValueError("Missing worklist")
+        if (type(queue) is not dict or set(queue) != {
+                "schema_version", "repository", "pr_number", "issue_number",
+                "security_blocker", "items"}
+                or type(queue["schema_version"]) is not int or queue["schema_version"] != 1
+                or queue["repository"] != REPO
+                or type(queue["pr_number"]) is not int or queue["pr_number"] != 32
+                or type(queue["issue_number"]) is not int or queue["issue_number"] != 31
+                or type(queue["security_blocker"]) is not int or queue["security_blocker"] != 21
+                or type(queue["items"]) is not list):
+            raise ValueError("Missing or untrusted worklist header")
         items = queue["items"]
         if (len(items) != len(KNOWN) or
                 {e.get("id") for e in items if type(e) is dict} != set(KNOWN)):
