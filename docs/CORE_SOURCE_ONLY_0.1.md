@@ -9,7 +9,7 @@ Relates to [TASK-002 #3](https://github.com/mel2003ru-code/OpDB/issues/3), [Safe
 This is a **new, minimal executable research adapter** written for OpDB Headquarters from the public repository coordination contract. It is **not a recovered import** of the separate Safety/Core/Quality teams' earlier working packages, nor an implementation of their proposed full interfaces. The historical original Core work is not silently attributed to this adapter.
 
 - Python 3.11+ and SQLite standard-library driver. SQLite is the only authoritative transaction store.
-- Typed UTF-8 keys (1..512 bytes), opaque values (0..1 MiB bytes), bounded batches (up to 10,000 operations).
+- Typed UTF-8 keys (1..512 bytes), opaque values (0..1 MiB bytes), bounded batches (up to 10,000 operations **and 8 MiB of total key/value payload**). An unbounded input iterator is capped before opening a transaction.
 - `put`, `get`, `delete`, `apply`, prefix `scan`, consistent SQLite `snapshot`, a disposable `build_lens_candidate`.
 - Source-only SQL queries and experimental `check_candidate_against_source`. Publication `admit_lens` ALWAYS refuses with `UNTRUSTED_CAPTURE_P0_21`. `read_mode` is always `SOURCE_ONLY`; no code path serves users from candidate memory.
 - SQLite transactions (`BEGIN IMMEDIATE` with full rollback on failure) and WAL for file-backed databases. `PRAGMA synchronous=FULL`; this is not evidence of power-loss guarantees outside SQLite's documented environment.
@@ -18,7 +18,7 @@ This is a **new, minimal executable research adapter** written for OpDB Headquar
 
 ## Correctness experiments
 
-`tests/test_core_source_only.py` uses two independent oracles: direct raw SQLite query from a separate connection and a seeded Python dictionary. Scenarios include insert/update/delete; binary and Unicode boundaries; SQL injection through keys; atomic batched writes; trigger-induced abort; external writes/deletes/inserts; synthetic journal forgery; DDL trigger deletion plus schema cookie restoration; source table deletion; ABA candidate equality **never admitting Lens**; concurrent external writers; uncommitted transactions; abrupt `os._exit` before and after commit; reopen; reproducible random sequence.
+`tests/test_core_source_only.py` uses two independent oracles: direct raw SQLite query from a separate connection and a seeded Python dictionary. Scenarios include insert/update/delete; binary and Unicode boundaries; SQL injection through keys; atomic batched writes; bounded streaming batches and memory budget; trigger-induced abort; external writes/deletes/inserts; synthetic journal forgery; DDL trigger deletion plus schema cookie restoration; source table deletion; ABA candidate equality **never admitting Lens**; concurrent external writers; uncommitted transactions; abrupt `os._exit` before and after commit; reopen; reproducible random sequence.
 
 These are finitely many SQLite-level experiments **not** formal linearizability proofs, storage fault injection, crash-stop cutover, verified Lens publication, or SQLite-vs-OpDB benchmarks. Positive Source-only tests do **not** close P0 #21.
 
