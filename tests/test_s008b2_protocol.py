@@ -6,6 +6,8 @@ import copy
 import hashlib
 import json
 import sqlite3
+import tempfile
+import threading
 import unittest
 
 from foundry import s008b2_protocol as protocol
@@ -158,6 +160,60 @@ class ProtocolS008B2Tests(unittest.TestCase):
     def test_strict_wire_decode_rejects_duplicate_nested_keys(self):
         e = make_envelope()
         self.assertEqual(self.check(e, b'{"a":{"x":1,"x":2}}')["state"], "BLOCKED")
+
+    def test_cross_connection_competing_replays_accept_at_most_one(self):
+        envelope = make_envelope()
+        report = guest_report(envelope)
+        with tempfile.TemporaryDirectory(prefix="opdb-s008b2-test-") as tmp:
+            database = tmp + "/ledger.sqlite3"
+            with sqlite3.connect(database) as setup:
+                protocol.initialize_ledger(setup)
+            ready = threading.Barrier(2)
+            outcomes = []
+            def worker():
+                with sqlite3.connect(database, timeout=5) as connection:
+                    ready.wait(timeout=5)
+                    decision = protocol.admit_result(
+                        envelope, report, repo=REPO, source_sha=SHA,
+                        policy_sha256=POLICY, image_digest=IMAGE,
+                        request=REQUEST, key=KEY, now=NOW, ledger=connection)
+                    outcomes.append(decision["state"])
+            tasks = [threading.Thread(target=worker) for _ in range(2)]
+            for task in tasks:
+                task.start()
+            for task in tasks:
+                task.join(timeout=10)
+                self.assertFalse(task.is_alive())
+        self.assertCountEqual(outcomes, ["QUARANTINED_FOR_REVIEW", "BLOCKED"])
+
+    def test_committed_nonce_survives_controller_restart_and_blocks_retry(self):
+        envelope = make_envelope()
+        with tempfile.TemporaryDirectory(prefix="opdb-s008b2-restart-") as tmp:
+            database = tmp + "/ledger.sqlite3"
+            with sqlite3.connect(database) as first:
+                protocol.initialize_ledger(first)
+                self.assertEqual(
+                    self.check(envelope, ledger=first)["state"],
+                    "QUARANTINED_FOR_REVIEW")
+            with sqlite3.connect(database) as restarted:
+                self.assertEqual(
+                    self.check(envelope, ledger=restarted)["state"], "BLOCKED")
+
+    def test_guest_data_is_not_correctness_or_isolation_attestation(self):
+        envelope = make_envelope()
+        payload = json.loads(guest_report(envelope))
+        payload["reply"]["candidate_text"] = "MALICIOUS BUT JUST DATA"
+        payload["checked"] = {"root_filesystem_read_only": True}
+        result = self.check(envelope, json.dumps(payload).encode())
+        self.assertEqual(result["state"], "QUARANTINED_FOR_REVIEW")
+        self.assertFalse(result["trusted_controller_attested"])
+        self.assertFalse(result["launch_authorized"])
+        self.assertFalse(result["production_allowed"])
+
+    def test_signed_challenge_has_no_exported_key(self):
+        envelope = make_envelope()
+        self.assertEqual(set(envelope), {"challenge", "mac"})
+        self.assertNotIn(KEY.decode(), json.dumps(envelope))
 
 
 if __name__ == "__main__":
