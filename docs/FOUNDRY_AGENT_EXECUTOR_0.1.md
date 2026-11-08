@@ -23,6 +23,17 @@ The structured report `DRAFT_PROPOSAL_READY` only means the fixed **synthetic** 
 
 The first command exercises unauthorized fields, SHA mismatch, budget tampering, synthetic negative control, patch failure, timeout and repository immutability. The second runs the sandbox demonstration, and the third returns `NOT_CONFIGURED` without executing a task. GitHub PR CI supplies its actual checkout SHA as `GITHUB_SHA`; all permissions are read-only.
 
+
+## Real GitHub Issue intake (read-only integration)
+
+In addition to the fixed offline demonstration, `foundry/issue_intake.py` verifies the **real private repository Issue #31** response obtained by `gh api repos/mel2003ru-code/OpDB/issues/31` in the GitHub Actions workflow. The workflow token grants `contents:read` and `issues:read` ONLY, and the token exists only in the GitHub API retrieval step environment.
+
+The validator requires exact issue number, canonical GitHub issue URL, repository API URL, an open state and the exact checked-out SHA. Issue title/body/embedded instructions are **never** interpreted as code; they cannot alter task type, file path, attempts or budget. It produces the same narrowly predefined synthetic `demo-add-v1` task envelope. The executor then validates this envelope again before any subprocess, performs the scratch-only RED → one fixed patch → GREEN proof, and leaves the source checkout unmodified.
+
+If GitHub API access fails, Issue #31 is closed, response URLs mismatch, inputs are malformed or a PR is presented instead of an Issue, the pipeline must fail closed. This is **real issue intake metadata**, not a general authorization to repair the user-authored issue text or to open PRs automatically. The current implementation uses no LLM and does not have GitHub write permissions.
+
+The new tests `tests/test_issue_intake.py` cover prompt-injection fields, wrong issue, forged URLs/repository, wrong SHA, malformed data and CLI end-to-end intake. The PR workflow also fetches the actual private Issue #31 rather than relying only on mocks, contingent on repository API permissions.
+
 ## Trust boundaries, not promises
 
 - Task JSON is only a **reviewed task envelope**, never a free-form instruction to run shell/SSH, access prod, fetch model weights, or modify a repository.
