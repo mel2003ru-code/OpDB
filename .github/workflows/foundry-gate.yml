@@ -11,6 +11,7 @@ on:
       - 'tests/test_patch_admission.py'
       - 'tests/test_sandbox_policy.py'
       - 'tests/test_model_gate.py'
+      - 'tests/test_worker_contract.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy tests.test_model_gate
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy tests.test_model_gate tests.test_worker_contract
       - name: Verify agent model policy rejects every paid inference path
         shell: bash
         run: |
@@ -89,6 +90,59 @@ jobs:
           python -m foundry.issue_intake --issue-json actual-issue-31.json --expected-sha "$GITHUB_SHA" --output admitted-task.json
           python -m foundry.agent_executor --task-file admitted-task.json --expected-sha "$GITHUB_SHA" --output admitted-demo.json
           python -c 'import json; a=json.load(open("admitted-demo.json")); assert a["state"] == "DRAFT_PROPOSAL_READY" and a["negative_control_failed_as_expected"] and a["candidate_tests_passed"] and not a["model_invoked"] and not a["repository_modified"] and not a["pull_request_created"] and not a["production_allowed"] and not a["launch_authorized"]'
+      - name: Controller to offline worker to quarantined review-only data (no execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m foundry.worker_contract --prepare \
+            --task-file admitted-task.json --expected-sha "$GITHUB_SHA" \
+            --output handoff-request.json
+          python -m foundry.worker_contract --offline-mock \
+            --request-file handoff-request.json --expected-sha "$GITHUB_SHA" \
+            --checkout "$GITHUB_WORKSPACE" --output handoff-reply.json
+          python -m foundry.worker_contract --review \
+            --request-file handoff-request.json --reply-file handoff-reply.json \
+            --expected-sha "$GITHUB_SHA" --checkout "$GITHUB_WORKSPACE" \
+            --output handoff-review.json
+          python - <<'PY'
+          import json
+          r=json.load(open("handoff-request.json", encoding="utf-8"))
+          d=json.load(open("handoff-review.json", encoding="utf-8"))
+          assert r["operation"]=="PROPOSE_TEXT_ONLY"
+          assert r["max_model_requests"]==r["max_total_tokens"]==r["max_cost_micro_usd"]==0
+          assert r["network_allowed"] is False
+          assert r["shell_allowed"] is False
+          assert r["execution_allowed"] is False
+          assert r["github_write_allowed"] is False
+          assert d["state"]=="REVIEW_ONLY_PATCH"
+          assert d["candidate_diff_sha256"]
+          assert d["human_review_required"] is True
+          assert d["worker_reply_executed"] is False
+          assert d["model_invoked"] is False
+          assert d["github_write_allowed"] is False
+          assert d["automatic_merge_allowed"] is False
+          assert d["production_allowed"] is False
+          assert d["launch_authorized"] is False
+          print("DATA_ONLY_HANDOFF_PASS — no execution, model, GitHub write or launch")
+          PY
+          python - <<'PY'
+          import json
+          r=json.load(open("handoff-reply.json", encoding="utf-8"))
+          r["command"]="deploy to production"
+          with open("handoff-malicious-reply.json", "w", encoding="utf-8") as f:
+              json.dump(r,f)
+          PY
+          if python -m foundry.worker_contract --review \
+              --request-file handoff-request.json \
+              --reply-file handoff-malicious-reply.json \
+              --expected-sha "$GITHUB_SHA" \
+              --checkout "$GITHUB_WORKSPACE" \
+              --output handoff-refusal.json; then
+            echo "ERROR: injected worker command was not rejected"
+            exit 1
+          fi
+          python -c 'import json; r=json.load(open("handoff-refusal.json")); assert r["state"] == "BLOCKED" and not r["launch_authorized"] and not r["github_write_allowed"]'
+          git diff --exit-code
       - name: Exercise bounded offline executor on a trusted synthetic task
         shell: bash
         run: |
