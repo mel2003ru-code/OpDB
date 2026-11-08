@@ -13,7 +13,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from foundry.sandbox_runner import (
-    ALLOWED_PROBES, DOCKER, PINNED_IMAGE, _docker_env, _run, main, run_probe,
+    ALLOWED_PROBES, DOCKER, PINNED_IMAGE, EXPECTED_KEYS,
+    _docker_env, _run, main, run_probe,
 )
 
 
@@ -29,7 +30,7 @@ def valid_observation(probe):
     return completed(stdout=json.dumps({
         "probe": expected,
         "passed": True,
-        "checked": {f"restriction_{i}": True for i in range(12)},
+        "checked": {key: True for key in EXPECTED_KEYS[probe]},
         "untrusted_code_executed": False,
         "untrusted_model_code_executed": False,
         "full_agent_sandbox_attested": False,
@@ -153,7 +154,7 @@ class DockerRuntimeSmokePolicyTests(unittest.TestCase):
     def test_observed_failure_blocks_even_if_docker_exit_zero(self):
         fake = valid_observation("confinement")
         details = json.loads(fake.stdout)
-        details["checked"]["restriction_2"] = False
+        details["checked"]["network_only_loopback"] = False
         stub, _ = run_stub(
             "confinement", observed=completed(stdout=json.dumps(details) + "\n")
         )
