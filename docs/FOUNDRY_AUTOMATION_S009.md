@@ -206,3 +206,56 @@ In particular, a scheduled task configured to read/write GitHub is
 unattended run and cross-run persistence remain to be observed. The
 scheduler must not assume this description alone constitutes successful
 autonomous execution.
+
+
+## S-009C: Safety and Quality handoff (review-request only)
+
+The module foundry/review_handoff.py combines a current **untrusted**
+S-009A read-only GitHub snapshot, the S-009B ledger, and the worklist
+into a **bounded JSON request** for independent Safety and Quality.
+It does not send requests, contact reviewers, modify GitHub, sign data,
+approve a candidate, execute code, merge PRs, pay for models, or launch
+the engine.
+
+Supported review state is only REQUEST_INDEPENDENT_REVIEW or HOLD.
+The request includes exact HEAD SHA for draft PR #32, Core #33, stacked
+Quality #34, a self-reported CI observation and run URLs, reviewable
+commits for A/B, P0 #21 as an immutable release blocker, and a fixed
+review checklist for the roles Safety and Quality. The module requires a
+recorded CLAIMED or DONE FND-009C event and consistency of the worklist.
+All approval and GitHub-write flags are false unconditionally.
+The manifest digest is **not an authentication signature**.
+
+The independent reviewer must separately fetch GitHub artifacts,
+reproduce tests on an actual runner, verify branch/SHA/issue state,
+scrutinize trust separation and non-atomic ledger/worklist updates,
+and publish their own result. No synthetic PASS or the assistant's
+own PR comment counts as independent approval.
+
+### Offline CLI
+
+    python -m foundry.review_handoff \
+      --snapshot exported-s009a-snapshot.json \
+      --ledger foundry/automation_ledger.json \
+      --worklist foundry/automation_worklist.json \
+      --expected-sha <CURRENT_PR32_SHA> \
+      --output review-request.json
+
+    python -m unittest -v tests.test_review_handoff
+
+Inputs are bounded: snapshot 64 KiB, ledger 16 KiB, worklist 8 KiB;
+output refuses to overwrite any existing file. A JSON request alone
+does not establish provenance because all input bytes are editable.
+If CI reports runner_id=0 and steps=[], describe tests as NOT EXECUTED,
+never as RED or GREEN. Review requests may be posted by the external
+scheduled assistant in PR #32 / Issue #31 with exactly the current SHA;
+such publication is a request, not an attested outcome.
+
+**Upon S-009 queue completion:** no unreviewed new task is implicitly
+authorized. The next legitimate iteration is S-010: observe a complete
+independently initiated scheduled iteration and demonstrate actual
+read-only GitHub collection, ledger-based idempotency, and publication
+of a review request; then conduct independent Safety/Quality. The
+assistant must open a new bounded approved work queue or request the
+owner's approval to extend scope rather than silently treating DONE as
+permission to self-launch or bypass CI.
