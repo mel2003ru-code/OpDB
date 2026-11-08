@@ -85,11 +85,13 @@ def _job_status(run, data):
             observed.append("FAIL_EXECUTED")
         else:
             observed.append("UNKNOWN")
-    if "FAIL_EXECUTED" in observed:
+    if "FAIL_EXECUTED" in observed and run.get("conclusion") == "failure":
         return "FAIL_EXECUTED"
-    if all(status == "PASS" for status in observed):
+    if (run.get("conclusion") == "success"
+            and all(status == "PASS" for status in observed)):
         return "PASS"
-    if all(status == "NO_RUNNER" for status in observed):
+    if (run.get("conclusion") == "failure"
+            and all(status == "NO_RUNNER" for status in observed)):
         return "NO_RUNNER"
     return "UNKNOWN"
 
