@@ -1,5 +1,7 @@
 name: OpDB Foundry 30-minute research checks
 on:
+  push:
+    branches: [main]
   schedule:
     # At :07 and :37 UTC; GitHub may delay scheduled workflows.
     - cron: '7,37 * * * *'
