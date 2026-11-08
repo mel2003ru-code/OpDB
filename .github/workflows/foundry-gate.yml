@@ -10,6 +10,7 @@ on:
       - 'tests/test_issue_intake.py'
       - 'tests/test_patch_admission.py'
       - 'tests/test_sandbox_policy.py'
+      - 'tests/test_model_gate.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -31,7 +32,25 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy tests.test_model_gate
+      - name: Verify agent model policy rejects every paid inference path
+        shell: bash
+        run: |
+          python -m foundry.model_gate --expected-sha "$GITHUB_SHA" --offline-demo --output offline-model-policy.json
+          python - <<'PY'
+          import json
+          d=json.load(open("offline-model-policy.json", encoding="utf-8"))
+          assert d["state"] == "OFFLINE_MOCK_POLICY_ONLY"
+          assert d["model_requests_used"] == 0
+          assert d["model_tokens_used"] == 0
+          assert d["model_cost_micro_usd"] == 0
+          assert d["model_invoked"] is False
+          assert d["remote_network_authorized"] is False
+          assert d["model_output_executable"] is False
+          assert d["github_write_allowed"] is False
+          assert d["production_allowed"] is False
+          assert d["launch_authorized"] is False
+          PY
       - name: Demand explicit NOT_CONFIGURED without real evidence
         shell: bash
         run: |
