@@ -26,9 +26,18 @@
       "seq": 3,
       "state": "DONE",
       "task_id": "FND-009B"
+    },
+    {
+      "seq": 4,
+      "task_id": "FND-009C",
+      "state": "CLAIMED",
+      "observed_sha": "0ce70b8e55d89346097c9a4f8f800801f2685aec",
+      "evidence_url": null,
+      "prev_sha256": "32fd02ef1bf1d5e3ec1a466b455eb157d74f827598ab0a3866d9994d28a42034",
+      "event_sha256": "3c2ceabd708cc9a7d95c26db17f0f1006bb263f95e42de40a09d95c2d4c0eed5"
     }
   ],
-  "head_sha256": "32fd02ef1bf1d5e3ec1a466b455eb157d74f827598ab0a3866d9994d28a42034",
+  "head_sha256": "3c2ceabd708cc9a7d95c26db17f0f1006bb263f95e42de40a09d95c2d4c0eed5",
   "issue_number": 31,
   "pr_number": 32,
   "repository": "mel2003ru-code/OpDB",
