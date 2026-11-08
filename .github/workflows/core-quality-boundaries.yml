@@ -1,0 +1,32 @@
+name: Quality Core bounded-resource falsification
+
+on:
+  pull_request:
+    paths:
+      - 'opdb/**'
+      - 'tests/test_quality_core_boundaries.py'
+      - '.github/workflows/core-quality-boundaries.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-core-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout isolated candidate with no persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute independently authored resource falsification tests
+        run: python -m unittest -v tests.test_quality_core_boundaries
+      - name: Exercise all repository regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Explicitly maintain restricted scope
+        run: echo 'Source-only SQLite research only; not trusted capture, not production, not independent native WAL'
