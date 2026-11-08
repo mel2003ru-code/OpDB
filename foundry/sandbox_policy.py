@@ -13,6 +13,9 @@ import re
 _IMAGE = re.compile(r"python:3\.11-slim@sha256:[a-f0-9]{64}\Z")
 _TEST = "/work/quality_probe.py"
 _MAX_SECONDS = 15
+# Canonical reviewed-fixture root. An arbitrary caller-supplied directory with
+# lookalike filenames can contain executable Python; NEVER mount it as trusted.
+_REVIEWED_FIXTURE = Path(__file__).resolve().parent / "fixtures"
 
 
 def plan(image, fixture_path, time_seconds=10, probe="quality"):
@@ -36,7 +39,15 @@ def plan(image, fixture_path, time_seconds=10, probe="quality"):
         return dict(locked, state="BLOCKED", reason="Invalid bounded time budget")
     if type(probe) is not str or probe not in ("quality", "confinement", "adversarial"):
         return dict(locked, state="BLOCKED", reason="Only reviewed synthetic probes permitted")
+    if not isinstance(fixture_path, (str, Path)):
+        return dict(locked, state="BLOCKED", reason="Reviewed fixture path required")
     root = Path(fixture_path)
+    # Validate BEFORE any filesystem access or external subprocess. Use exact
+    # lexical path identity, not .resolve() here: resolve() would follow links
+    # supplied by an attacker and let a symlink alias pass this comparison.
+    if root != _REVIEWED_FIXTURE:
+        return dict(locked, state="BLOCKED",
+                    reason="Unreviewed fixture directory: only bundled fixture allowed")
     try:
         if not root.is_absolute() or root.is_symlink() or not root.is_dir():
             return dict(locked, state="BLOCKED", reason="Absolute nonsymlink work directory required")
