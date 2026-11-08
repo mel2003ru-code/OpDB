@@ -8,6 +8,8 @@ on:
       - 'tests/test_launch_gate.py'
       - 'tests/test_agent_executor.py'
       - 'tests/test_issue_intake.py'
+      - 'tests/test_patch_admission.py'
+      - 'tests/test_sandbox_policy.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -29,7 +31,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy
       - name: Demand explicit NOT_CONFIGURED without real evidence
         shell: bash
         run: |
@@ -74,6 +76,35 @@ jobs:
           python -m foundry.agent_executor --expected-sha "$GITHUB_SHA" --demo-task --output executor-demo.json
           python -c 'import json; p=json.load(open("executor-demo.json")); assert p["state"] == "DRAFT_PROPOSAL_READY" and p["negative_control_failed_as_expected"] and p["candidate_tests_passed"] and p["candidate_diff_sha256"] and not p["model_invoked"] and not p["repository_modified"] and not p["pull_request_created"] and not p["production_allowed"] and not p["launch_authorized"]'
           git diff --exit-code
+      - name: Quarantine model-like proposal as data only (never execute candidate)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path("foundry/fixtures/calculator.py")
+          original=root.read_bytes()
+          proposal=original.decode().replace("    return left - right\n", "    return left + right\n")
+          assert proposal.encode()!=original
+          pathlib.Path("proposed-patch.json").write_text(json.dumps({
+            "schema_version":1,"source_sha":os.environ["GITHUB_SHA"],
+            "task_key":"demo-add-v1","issue_number":31,
+            "path":"foundry/fixtures/calculator.py",
+            "original_sha256":hashlib.sha256(original).hexdigest(),
+            "candidate_sha256":hashlib.sha256(proposal.encode()).hexdigest(),
+            "candidate_text":proposal
+          }))
+          PY
+          python -m foundry.patch_admission --proposal proposed-patch.json --expected-sha "$GITHUB_SHA" --checkout . --output quarantine-result.json
+          python -c 'import json; q=json.load(open("quarantine-result.json")); assert q["state"]=="QUARANTINED_FOR_REVIEW" and not q["candidate_executed"] and not q["github_write_allowed"] and not q["sandbox_verified"] and not q["launch_authorized"]'
+          git diff --exit-code
+      - name: Sandbox must be unconfigured without independently pinned local image
+        shell: bash
+        run: |
+          if python -m foundry.sandbox_policy --fixture "$GITHUB_WORKSPACE/foundry/fixtures" > sandbox-policy.json; then
+            echo "ERROR: Unconfigured sandbox must fail closed"
+            exit 1
+          fi
+          python -c 'import json; d=json.load(open("sandbox-policy.json")); assert d["state"]=="BLOCKED" and not d["candidate_executed"] and not d["runtime_verified"] and not d["production_allowed"] and not d["launch_authorized"]'
       - name: Check absence of untracked files in tracked source folders
         shell: bash
         run: |
