@@ -158,7 +158,7 @@ class IsolatedWorkerS008Tests(unittest.TestCase):
                      for x in cmd if x.startswith("--env=OPDB_SESSION_NONCE="))
         digest = next(x[len("--env=OPDB_REQUEST_SHA256="):]
                       for x in cmd if x.startswith("--env=OPDB_REQUEST_SHA256="))
-        self.assertRegex(nonce, r"\\A[0-9a-f]{32}\\Z")
+        self.assertRegex(nonce, r"\A[0-9a-f]{32}\Z")
         expected = hashlib.sha256(json.dumps(
             _request_for(SHA), sort_keys=True, separators=(",", ":")
         ).encode("ascii")).hexdigest()
