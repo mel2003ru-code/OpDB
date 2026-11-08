@@ -5,6 +5,7 @@ on:
       - 'foundry/**'
       - 'tests/test_foundry_control.py'
       - 'tests/test_foundry_loop.py'
+      - 'tests/test_launch_gate.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -25,7 +26,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate
       - name: Demand explicit NOT_CONFIGURED without real evidence
         shell: bash
         run: |
@@ -47,5 +48,10 @@ jobs:
           else
             echo "No complete Foundry decision produced (research must not advance)"
           fi
+      - name: Explicitly forbid launch until real authenticated release evidence
+        shell: bash
+        run: |
+          python -m foundry.launch_gate --output launch-readiness.json
+          python -c 'import json; r=json.load(open("launch-readiness.json")); assert r["state"] == "NOT_READY" and not r["button_enabled"] and not r["launch_authorized"] and not r["launched"] and r["launched_at_utc"] is None'
       - name: Explain trust boundary
         run: echo "No actual adapter verified, no external benchmark executed, no automatic release, merge or deployment."
