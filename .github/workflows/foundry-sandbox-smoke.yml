@@ -206,6 +206,43 @@ jobs:
           print("S008_FIXED_GUEST_OBSERVED; independent trusted controller NOT ATTESTED")
           PY
           git diff --exit-code
+      - name: S-008 negative control — removing shared-memory cap must fail
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, secrets
+          from foundry.sandbox_policy import _REVIEWED_FIXTURE, plan
+          from foundry.sandbox_runner import DOCKER, PINNED_IMAGE, _run
+          cfg=plan(PINNED_IMAGE,_REVIEWED_FIXTURE,12,probe="handoff")
+          assert cfg["state"]=="POLICY_PLAN_ONLY", cfg
+          argv=list(cfg["command_argv"])
+          argv.remove("--shm-size=8m")
+          name="opdb-s008-negative-"+secrets.token_hex(8)
+          at=argv.index(PINNED_IMAGE)
+          argv[0]=DOCKER
+          argv[at:at]=["--name="+name,
+                        "--env=OPDB_SOURCE_SHA="+os.environ["GITHUB_SHA"]]
+          try:
+              result=_run(argv,timeout=25)
+              report=json.loads(result.stdout.strip())
+              assert result.returncode != 0, report
+              assert report["probe"]=="fixed-data-only-handoff-s008"
+              assert report["passed"] is False
+              assert report["checked"]["shm_8m"] is False
+              assert report["checked"]["network_only_loopback"] is True
+              assert report["arbitrary_model_code_executed"] is False
+              assert report["launch_authorized"] is False
+              print("EXPECTED_S008_NEGATIVE: missing --shm-size=8m detected")
+          finally:
+              try:
+                  _run([DOCKER,"rm","-f",name],timeout=5)
+              finally:
+                  alive=_run([DOCKER,"ps","-a","--format","{{.Names}}",
+                              "--filter","name=^/"+name+"$"],timeout=5)
+                  assert alive.returncode==0 and not alive.stdout.strip(), (
+                      "Negative probe container cleanup not confirmed")
+          PY
       - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
         if: always()
         shell: bash
