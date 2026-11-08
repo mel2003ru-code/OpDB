@@ -115,6 +115,16 @@ jobs:
           assert report["launch_authorized"] is False
           print("EXPECTED_NEGATIVE_CONTROLS: network, UID, memory detected")
           PY
+      - name: Preserve positive and negative sandbox evidence for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opdb-sandbox-evidence-${{ github.sha }}
+          path: |
+            fixed-sandbox-evidence.json
+            sandbox-negative-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Confirm source checkout remains unmodified
         run: git diff --exit-code
       - name: Declare exact evidence boundary
