@@ -6,6 +6,7 @@ on:
       - 'tests/test_foundry_control.py'
       - 'tests/test_foundry_loop.py'
       - 'tests/test_launch_gate.py'
+      - 'tests/test_agent_executor.py'
       - '.github/workflows/foundry-gate.yml'
   workflow_dispatch:
 
@@ -26,7 +27,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exercise negative and synthetic victory cases
-        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor
       - name: Demand explicit NOT_CONFIGURED without real evidence
         shell: bash
         run: |
@@ -53,5 +54,15 @@ jobs:
         run: |
           python -m foundry.launch_gate --output launch-readiness.json
           python -c 'import json; r=json.load(open("launch-readiness.json")); assert r["state"] == "NOT_READY" and not r["button_enabled"] and not r["launch_authorized"] and not r["launched"] and r["launched_at_utc"] is None'
+      - name: Exercise bounded offline executor on a trusted synthetic task
+        shell: bash
+        run: |
+          python -m foundry.agent_executor --expected-sha "$GITHUB_SHA" --demo-task --output executor-demo.json
+          python -c 'import json; p=json.load(open("executor-demo.json")); assert p["state"] == "DRAFT_PROPOSAL_READY" and p["negative_control_failed_as_expected"] and p["candidate_tests_passed"] and p["candidate_diff_sha256"] and not p["model_invoked"] and not p["repository_modified"] and not p["pull_request_created"] and not p["production_allowed"] and not p["launch_authorized"]'
+          git diff --exit-code
+      - name: Check absence of untracked files in tracked source folders
+        shell: bash
+        run: |
+          test -z "$(git ls-files --others --exclude-standard -- foundry tests)"
       - name: Explain trust boundary
         run: echo "No actual adapter verified, no external benchmark executed, no automatic release, merge or deployment."
