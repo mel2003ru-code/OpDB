@@ -238,6 +238,47 @@ class BoundedWorkerHandoffTests(unittest.TestCase):
         self.assertIsNone(reply)
         self.assertIn("not approved", reason)
 
+    def test_lookalike_checkout_with_tampered_fixture_is_not_authoritative(self):
+        """The worker must not choose a spoofed working tree as Truth."""
+        request, _ = exchange()
+        with tempfile.TemporaryDirectory(prefix="forged-opdb-tree-") as tmp:
+            fake = Path(tmp) / "foundry" / "fixtures"
+            fake.mkdir(parents=True)
+            source = fake / "calculator.py"
+            source.write_text(
+                (_FIXTURE / "calculator.py").read_text(encoding="utf-8")
+                + "# unreviewed instruction inside spoofed source\\n",
+                encoding="utf-8",
+            )
+            forged, reason = mock_reply(request, SHA, tmp)
+            self.assertIsNone(forged)
+            self.assertTrue(reason)
+
+    def test_json_duplicate_keys_cannot_override_request_identity(self):
+        """Reject duplicate source_sha keys even if final duplicate is valid."""
+        with tempfile.TemporaryDirectory(prefix="duplicate-worker-") as tmp:
+            root = Path(tmp)
+            request, reply = exchange()
+            req = root / "request.json"
+            res = root / "reply.json"
+            # Full request is valid except for a duplicate field (last wins
+            # with default json.loads, but must be rejected as ambiguous).
+            encoded = json.dumps(request)
+            encoded = encoded.replace(
+                '"source_sha": "' + SHA + '"',
+                '"source_sha": "' + "b" * 40 + '", "source_sha": "' + SHA + '"',
+                1,
+            )
+            req.write_text(encoded, encoding="utf-8")
+            res.write_text(json.dumps(reply), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                rc = main(["--review", "--request-file", str(req),
+                           "--reply-file", str(res), "--expected-sha", SHA,
+                           "--checkout", str(SOURCE_ROOT)])
+            self.assertEqual(rc, 2)
+            verdict = json.loads(out.getvalue())
+            self.assertEqual(verdict["state"], "BLOCKED")
+
     def test_cli_absent_inputs_fails_without_side_effects(self):
         with contextlib.redirect_stdout(io.StringIO()) as out:
             rc = main(["--prepare", "--expected-sha", SHA])
