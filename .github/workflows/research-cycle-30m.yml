@@ -33,11 +33,12 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Run independent configured SQLite checks
         run: python -m research.cycle --output research-cycle.json
-      - name: Preserve machine-readable results
+      - name: Retain complete evidence in GitHub Actions logs, no artifact quota
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: opdb-research-cycle
-          path: research-cycle.json
-          retention-days: 7
-          if-no-files-found: ignore
+        shell: bash
+        run: |
+          if [ -s research-cycle.json ]; then
+            cat research-cycle.json
+          else
+            echo "No machine-readable result was generated"
+          fi
