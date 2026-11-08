@@ -19,13 +19,26 @@ from .sandbox_policy import _REVIEWED_FIXTURE, plan
 # Updating it MUST involve a code review and a new runtime evidence run.
 PINNED_IMAGE = (
     "python:3.11-slim@sha256:"
-    "db20d8506e2f15b6db39b40b6015ca46bae855dec6dd326d462cfe79ae972893"
+    "07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535"
 )
 DOCKER = "/usr/bin/docker"
 ALLOWED_PROBES = ("confinement", "adversarial")
 PROBE_NAMES = {
     "confinement": "synthetic-fixed-review-only",
     "adversarial": "fixed-reviewed-denied-operations",
+}
+EXPECTED_KEYS = {
+    "confinement": frozenset((
+        "non_root_uid", "root_filesystem_read_only", "work_mount_read_only",
+        "tmpfs_noexec", "network_only_loopback", "outbound_tcp_denied",
+        "cgroup_memory_128m", "cgroup_pids_32", "cgroup_cpu_half",
+        "no_new_privileges", "no_effective_caps",
+    )),
+    "adversarial": frozenset((
+        "root_write_denied", "source_write_denied", "docker_socket_absent",
+        "secret_names_absent", "seccomp_filter_active",
+        "baseline_confinement_pass", "no_host_network_interface",
+    )),
 }
 MAX_EXECUTION_SECONDS = 25
 
@@ -145,10 +158,16 @@ def run_probe(probe):
                     or observed.get("probe") != PROBE_NAMES[probe]
                     or observed.get("passed") is not True
                     or type(observed.get("checked")) is not dict
-                    or len(observed["checked"]) < 9
+                    or set(observed["checked"]) != EXPECTED_KEYS[probe]
                     or not all(type(v) is bool and v for v in observed["checked"].values())
-                    or observed.get("untrusted_code_executed") is True
-                    or observed.get("untrusted_model_code_executed") is True):
+                    or (probe == "confinement" and (
+                        observed.get("untrusted_code_executed") is not False
+                        or observed.get("full_agent_sandbox_attested") is not False
+                    ))
+                    or (probe == "adversarial" and (
+                        observed.get("untrusted_model_code_executed") is not False
+                        or observed.get("hostile_code_sandbox_attested") is not False
+                    ))):
                 return _response(
                     "BLOCKED", "Runtime observations failed closed",
                     probe, image_id=image_id,
