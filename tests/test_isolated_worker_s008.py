@@ -11,7 +11,7 @@ from unittest.mock import patch
 from foundry.sandbox_policy import plan, _REVIEWED_FIXTURE
 from foundry.sandbox_runner import DOCKER, PINNED_IMAGE
 from foundry.worker_contract import _request_for, mock_reply, _CONTROLLER_CHECKOUT
-from foundry.isolated_worker import run_isolated_handoff
+from foundry.isolated_worker import run_isolated_handoff, _OBSERVED
 
 SHA = "a" * 40
 
@@ -23,6 +23,17 @@ def completed(code=0, stdout=""):
 def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=False):
     reply, error = mock_reply(_request_for(SHA), SHA, _CONTROLLER_CHECKOUT)
     assert error is None, error
+    report = {
+        "probe": "fixed-data-only-handoff-s008",
+        "passed": True,
+        "checked": {key: True for key in _OBSERVED},
+        "reply": reply,
+        "model_invoked": False,
+        "arbitrary_model_code_executed": False,
+        "github_write_allowed": False,
+        "trusted_controller_attested": False,
+        "launch_authorized": False,
+    }
     calls = []
     def invoke(argv, *, timeout):
         calls.append(tuple(argv))
@@ -31,7 +42,7 @@ def stub_docker(*, exit_code=0, bad_json=False, leaked=False, simulate_timeout=F
         if argv[1] == "run":
             if simulate_timeout:
                 raise subprocess.TimeoutExpired(argv, 3)
-            return completed(exit_code, "{garbage" if bad_json else json.dumps(reply)+"\n")
+            return completed(exit_code, "{garbage" if bad_json else json.dumps(report)+"\n")
         if argv[1:3] == ["rm", "-f"]:
             return completed()
         if argv[1:3] == ["ps", "-a"]:
