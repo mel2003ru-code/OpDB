@@ -158,6 +158,29 @@ class FoundryControlTests(unittest.TestCase):
         x["staging"] = {"passed": True, "rollback_passed": True}
         self.assertFalse(evaluate(x)["production_allowed"])
 
+    def test_different_dataset_across_peers(self):
+        x = candidate()
+        x["benchmarks"]["runs"][4]["dataset_sha256"] = "f" * 64
+        self.assert_state(x, "NOT_VERIFIED")
+
+    def test_different_seeds_across_peers(self):
+        x = candidate()
+        x["benchmarks"]["runs"][8]["trial_seeds"] = list(range(7, 14))
+        self.assert_state(x, "NOT_VERIFIED")
+
+    def test_boolean_schema_version_not_accepted(self):
+        x = candidate(); x["schema_version"] = True
+        self.assert_state(x, "BLOCKED")
+
+    def test_invalid_pair_identity_safe(self):
+        x = candidate(); x["benchmarks"]["runs"][0]["peer"] = ["PostgreSQL"]
+        self.assert_state(x, "NOT_VERIFIED")
+
+    def test_extraneous_comparison_row_safe(self):
+        x = candidate()
+        x["benchmarks"]["runs"].append({"peer": "unknown", "workload": "read_heavy"})
+        self.assert_state(x, "NOT_VERIFIED")
+
     def test_deterministic(self):
         x = candidate()
         self.assertEqual(evaluate(x), evaluate(copy.deepcopy(x)))
