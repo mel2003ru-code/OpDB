@@ -1,9 +1,6 @@
 name: OpDB Foundry daily status
+# Paused to save Actions minutes; run manually when a status issue is needed.
 on:
-  push:
-    branches: [main]
-  schedule:
-    - cron: '13 5 * * *'
   workflow_dispatch:
 
 permissions:

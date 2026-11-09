@@ -1,7 +1,6 @@
 name: OpDB weekly cross-runtime research
+# Paused: windows-latest bills minutes at 2x. Run manually before releases.
 on:
-  schedule:
-    - cron: '49 2 * * 1'
   workflow_dispatch:
 
 permissions:
