@@ -1,10 +1,7 @@
 name: OpDB Foundry 30-minute research checks
+# Paused: the 30-minute schedule (~1,400+ runs/month) exhausted the
+# 2,000 free Actions minutes in Nov 2026. Run manually when needed.
 on:
-  push:
-    branches: [main]
-  schedule:
-    # At :07 and :37 UTC; GitHub may delay scheduled workflows.
-    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 permissions:
