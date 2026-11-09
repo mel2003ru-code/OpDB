@@ -121,11 +121,26 @@ def _job_status(run, data):
                 else "UNKNOWN"
             )
         elif rid > 0 and steps and conclusion == "failure":
-            observed.append("FAIL_EXECUTED")
+            # A runner may fail during setup before a required regression
+            # executes. Only a failed/cancelled/timed-out mandatory test
+            # step supports an observed regression failure. Otherwise block
+            # without inventing evidence of a test failure.
+            required = REQUIRED_CI_STEPS.get(run.get("name"), ())
+            failed_required = any(
+                type(step) is dict
+                and type(step.get("name")) is str
+                and step["name"] in required
+                and step.get("conclusion") in ("failure", "cancelled", "timed_out")
+                for step in steps
+            )
+            observed.append("FAIL_EXECUTED" if failed_required
+                            else "FAIL_BEFORE_TEST")
         else:
             observed.append("UNKNOWN")
     if "FAIL_EXECUTED" in observed and run.get("conclusion") == "failure":
         return "FAIL_EXECUTED"
+    if "FAIL_BEFORE_TEST" in observed and run.get("conclusion") == "failure":
+        return "FAIL_BEFORE_TEST"
     if (run.get("conclusion") == "success"
             and all(status == "PASS" for status in observed)):
         return "PASS"
@@ -227,6 +242,8 @@ def snapshot(feed, expected_pr_sha):
     observations = set(statuses.values())
     if "FAIL_EXECUTED" in observations:
         ci_state = "FAIL_EXECUTED"
+    elif "FAIL_BEFORE_TEST" in observations:
+        ci_state = "FAIL_BEFORE_TEST"
     elif observations == {"PASS"}:
         ci_state = "PASS"
     elif observations == {"NO_RUNNER"}:

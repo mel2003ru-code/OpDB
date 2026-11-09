@@ -279,3 +279,20 @@ layer: forged GitHub exports, rewritten workflow step labels, or intentional
 `continue-on-error` configurations still require independent review and
 cannot grant execution, merge, Lens or release permissions. The scheduler
 must inspect live GitHub run/job steps independently before making any claim.
+
+
+## FND-012A — distinguish runner/setup failure from executed regression
+
+The advisory classifier now reports `FAIL_BEFORE_TEST` when a GitHub job
+with an allocated runner fails without a failed mandatory regression step.
+This includes setup-only failures and failures in optional post-test steps;
+it is **not** evidence that regression tests failed. An explicitly failed,
+cancelled or timed-out required regression step is `FAIL_EXECUTED`.
+Both states block progress and cannot authorize any promotion. A job with
+`runner_id=0`, `steps=[]` remains `NO_RUNNER`. Missing or inconsistent
+metadata remains `UNKNOWN`. Step names and outcomes in exported JSON are
+untrusted; this classification is not independent test attestation.
+
+Added focused negative cases for setup failure, optional failure and failed
+mandatory steps. This draft-only commit does not imply GitHub CI execution,
+independent Safety/Quality approval or permission to activate Lens.
