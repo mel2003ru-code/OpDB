@@ -77,7 +77,35 @@ class GitHubSnapshotTests(unittest.TestCase):
     def test_executed_failure_is_distinguished(self):
         payload = sample()
         payload["jobs"]["900"] = [{"run_id": 900, "runner_id": 123,
-                                     "steps": [{"name": "unittest"}],
+                                     "steps": [{"name": REQUIRED_CI_STEPS[WORKFLOWS[0]][0],
+                                                "conclusion": "failure"}],
+                                     "conclusion": "failure"}]
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "FAIL_EXECUTED")
+
+    def test_runner_setup_failure_before_required_test_is_not_regression(self):
+        payload = sample()
+        payload["jobs"]["900"] = [{"run_id": 900, "runner_id": 123,
+                                     "steps": [{"name": "Set up job",
+                                                "conclusion": "failure"}],
+                                     "conclusion": "failure"}]
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "FAIL_BEFORE_TEST")
+        self.assertFalse(snapshot(payload, PR_HEAD)["ci_attested"])
+
+    def test_failed_optional_step_after_successful_test_not_regression(self):
+        payload = sample()
+        payload["jobs"]["900"] = [{"run_id": 900, "runner_id": 123,
+                                     "steps": [{"name": REQUIRED_CI_STEPS[WORKFLOWS[0]][0],
+                                                "conclusion": "success"},
+                                               {"name": "Upload artifacts",
+                                                "conclusion": "failure"}],
+                                     "conclusion": "failure"}]
+        self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "FAIL_BEFORE_TEST")
+
+    def test_required_test_cancelled_is_executed_failure(self):
+        payload = sample()
+        payload["jobs"]["900"] = [{"run_id": 900, "runner_id": 123,
+                                     "steps": [{"name": REQUIRED_CI_STEPS[WORKFLOWS[0]][0],
+                                                "conclusion": "cancelled"}],
                                      "conclusion": "failure"}]
         self.assertEqual(snapshot(payload, PR_HEAD)["ci_state"], "FAIL_EXECUTED")
 
