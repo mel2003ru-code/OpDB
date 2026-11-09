@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: foundry-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-handoff-metadata:
     runs-on: ubuntu-latest
