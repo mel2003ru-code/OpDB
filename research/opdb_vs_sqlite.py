@@ -291,6 +291,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=1729)
     parser.add_argument("--reads", type=int, default=100)
     parser.add_argument("--group", default="g1")
+    parser.add_argument("--write", action="store_true", help="also benchmark writes")
+    parser.add_argument("--write-batches", type=int, default=20)
     args = parser.parse_args()
     if any(size < 1 for size in args.sizes) or args.reads < 5:
         parser.error("sizes must be positive and reads >= 5")
@@ -309,6 +311,12 @@ def main() -> None:
             path = root / f"lab001-{size}-{args.seed}.db"
             row["files_bytes_after_close"] = db_files_bytes(path)
             print(json.dumps(row), flush=True)
+            if args.write:
+                for kind in ("append", "overwrite"):
+                    write = write_comparison(root, size, args.seed,
+                                             batches=args.write_batches,
+                                             workload=kind)
+                    print(json.dumps({"experiment": "LAB-001-WRITE", **write}), flush=True)
 
 
 if __name__ == "__main__":
