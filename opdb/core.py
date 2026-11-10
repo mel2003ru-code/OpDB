@@ -1,8 +1,8 @@
-"""OpDB Core experiment 0.1: SQLite-backed authoritative KV and disposable Lens.
+"""OpDB Core experiment 0.1: authoritative SQLite KV, opt-in group Lens.
 
-Not a native DBMS, no SQL compatibility, no verified change capture.
-All user reads use SQLite directly. No derived-Lens admission exists because
-external privileged writers can bypass/forge SQLite trigger logs (P0 #21).
+Not a native DBMS and no SQL compatibility. get/scan/snapshot remain Source
+reads; the engine-owned group Lens uses ADR-006 single-writer assumptions.
+External privileged file modifications are outside the supported threat model.
 """
 from __future__ import annotations
 
@@ -26,6 +26,12 @@ class SourceSnapshot:
     rows: tuple[tuple[str, bytes], ...]
     digest_sha256: str
     row_count: int
+
+@dataclass(frozen=True)
+class GroupStats:
+    row_count: int
+    value_bytes: int
+    served_from: Literal["LENS", "SOURCE"]
 
 @dataclass(frozen=True)
 class LensCandidate:
@@ -97,17 +103,17 @@ def _source_row(row: tuple) -> tuple[str, bytes]:
 class TruthStore:
     """Single-process research API. SQLite remains authoritative.
 
-    An untrusted external SQLite connection may mutate the database. This API
-    does NOT assume it can authenticate that writer, detect forged journals,
-    or safely authorize accelerated reads. Therefore all read paths are Source.
+    All legacy reads remain Source-only. The opt-in aggregate Lens is version
+    checked and disposable, not authenticated against privileged file writers.
     """
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, lens: bool = False):
         path = str(path)
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, timeout=5, isolation_level=None,
                                    check_same_thread=False, cached_statements=0)
         self._closed = False
+        self._lens = None
         try:
             self._db.execute("PRAGMA busy_timeout=5000")
             if path != ":memory:":
@@ -117,6 +123,18 @@ class TruthStore:
                 "CREATE TABLE IF NOT EXISTS opdb_source_kv "
                 "(k TEXT PRIMARY KEY COLLATE BINARY NOT NULL, v BLOB NOT NULL)"
             )
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS opdb_meta "
+                "(singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+                "commit_seq INTEGER NOT NULL)"
+            )
+            self._db.execute(
+                "INSERT OR IGNORE INTO opdb_meta(singleton,commit_seq) VALUES(1,0)"
+            )
+            if lens:
+                from .lens import AggregateLens
+                self._lens = AggregateLens(self._db)
+                self._lens.rebuild()
         except BaseException:
             self._db.close()
             self._closed = True
@@ -128,7 +146,9 @@ class TruthStore:
 
     @property
     def lens_enabled(self) -> bool:
-        return False
+        with self._lock:
+            self._ensure_open()
+            return self._lens is not None and self._lens.valid()
 
     def _ensure_open(self) -> None:
         if self._closed:
@@ -175,9 +195,30 @@ class TruthStore:
                 raise ValueError("batch exceeds 8 MiB of key and value payload")
         with self._lock:
             self._ensure_open()
+            tracking = self._lens is not None and self._lens.valid()
+            baseline = (self._lens.seq, self._lens.data_version) if tracking else None
             self._db.execute("BEGIN IMMEDIATE")
             try:
+                if tracking and self._lens.versions() != baseline:
+                    tracking = False
+                changes = {}
+                if tracking:
+                    from .lens import _metric, group_of
                 for item in checked:
+                    if tracking:
+                        previous = self._db.execute(
+                            "SELECT k,typeof(v),length(v) FROM opdb_source_kv WHERE k=?",
+                            (item[1],),
+                        ).fetchone()
+                        group = group_of(item[1])
+                        delta = changes.setdefault(group, [0, 0])
+                        if previous is not None:
+                            _, old_length = _metric(previous)
+                            delta[0] -= 1
+                            delta[1] -= old_length
+                        if item[0] == "put":
+                            delta[0] += 1
+                            delta[1] += len(item[2])
                     if item[0] == "put":
                         self._db.execute(
                             "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
@@ -188,10 +229,43 @@ class TruthStore:
                         self._db.execute(
                             "DELETE FROM opdb_source_kv WHERE k=?", (item[1],)
                         )
+                self._db.execute(
+                    "UPDATE opdb_meta SET commit_seq=commit_seq+1 WHERE singleton=1"
+                )
+                next_seq = self._db.execute(
+                    "SELECT commit_seq FROM opdb_meta WHERE singleton=1"
+                ).fetchone()[0]
                 self._db.execute("COMMIT")
             except BaseException:
                 self._db.execute("ROLLBACK")
                 raise
+            if self._lens is not None:
+                if tracking:
+                    self._lens.advance(changes, next_seq, baseline[1])
+                else:
+                    self._lens.clear()
+                    try:
+                        self._lens.rebuild()
+                    except (sqlite3.DatabaseError, SourceIntegrityError):
+                        self._lens.clear()
+
+    def group_stats_source(self, group: str) -> GroupStats:
+        """Reference calculation directly over authoritative Source rows."""
+        group = _key(group, allow_empty=True)
+        from .lens import source_stats
+        with self._lock:
+            self._ensure_open()
+            return source_stats(self._db, group)
+
+    def group_stats(self, group: str) -> GroupStats:
+        """Version-checked group Lens, or safe Source fallback."""
+        group = _key(group, allow_empty=True)
+        from .lens import source_stats
+        with self._lock:
+            self._ensure_open()
+            if self._lens is None:
+                return source_stats(self._db, group)
+            return self._lens.get(group)
 
     def put(self, key: str, value: bytes) -> None:
         self.apply([("put", key, value)])
@@ -265,11 +339,11 @@ class TruthStore:
                 and candidate.source_digest_sha256 == actual.digest_sha256)
 
     def admit_lens(self, candidate: LensCandidate) -> Admission:
-        """Unconditionally fail closed until Safety provides trusted capture."""
+        """Legacy arbitrary row candidate cannot enter the managed group Lens."""
         if not isinstance(candidate, LensCandidate):
             raise TypeError("candidate must be a LensCandidate")
         return Admission(
             accepted=False,
             mode="SOURCE_ONLY",
-            reason="UNTRUSTED_CAPTURE_P0_21: no trusted commit journal/cutover proof",
+            reason="ROW_CANDIDATE_UNSUPPORTED: use managed group_stats Lens",
         )
