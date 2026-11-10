@@ -9,7 +9,7 @@ from pathlib import Path
 from opdb import TruthStore
 from research.opdb_vs_sqlite import (
     checked_out_sha, db_files_bytes, distribution_ns,
-    raw_sqlite_stats, run_case,
+    raw_sqlite_stats, run_case, write_comparison,
 )
 
 
@@ -138,6 +138,22 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                     self.root / f"lab001-{size}-1729.db"
                 )
                 print("LAB001_LARGE=" + json.dumps(result, sort_keys=True), flush=True)
+
+    def test_written_batches_match_independent_model_all_modes(self):
+        for kind in ("append", "overwrite"):
+            with self.subTest(kind=kind):
+                result = write_comparison(
+                    self.root, 10000, 1729,
+                    batches=20, batch_size=1000, workload=kind
+                )
+                self.assertEqual(result["checks"], "PASS")
+                self.assertEqual(
+                    set(result["modes"]),
+                    {"source", "lens", "sqlite_direct"},
+                )
+                self.assertEqual(result["batches"], 20)
+                print("LAB001_WRITES=" + json.dumps(result, sort_keys=True),
+                      flush=True)
 
     def test_invalid_or_empty_measurements_fail(self):
         with self.assertRaises(ValueError):
