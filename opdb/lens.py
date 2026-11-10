@@ -54,14 +54,18 @@ def source_stats(db: sqlite3.Connection, group: str) -> GroupStats:
 class AggregateLens:
     """Per-connection group counts and lengths; never a source of durability."""
 
-    def __init__(self, db: sqlite3.Connection):
+    def __init__(self, db: sqlite3.Connection, *, persistent: bool = False):
         self.db = db
+        from .persistent_lens import PersistedLensState
+        self.persist = PersistedLensState(db) if persistent else None
+        self.loaded_from_disk = False
         self.stats: dict[str, tuple[int, int]] | None = None
         self.seq: int | None = None
         self.data_version: int | None = None
         self.rebuild_ns = 0
 
     def clear(self) -> None:
+        self.loaded_from_disk = False
         self.stats = None
         self.seq = None
         self.data_version = None
@@ -112,13 +116,78 @@ class AggregateLens:
         self.seq, self.data_version = after
         return True
 
+    def restore_or_rebuild(self, *, force: bool = False) -> bool:
+        """Load versioned aggregate without Source scan, or rebuild atomically.
+
+        Stale/malformed saved state is disposable. Source remains the only
+        durable truth; this is not a privileged-writer authenticity proof.
+        """
+        if self.persist is None:
+            return self.rebuild()
+        self.clear()
+        started = time.perf_counter_ns()
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            self.persist.ensure_schema()
+            before = self.versions()
+            cached = None if force else self.persist.load(before[0])
+            restored = cached is not None
+            if not restored:
+                counts: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+                for row in self.db.execute(
+                    "SELECT k,typeof(v),length(v) FROM opdb_source_kv"
+                ):
+                    key, size = _metric(row)
+                    pair = counts[group_of(key)]
+                    pair[0] += 1
+                    pair[1] += size
+                cached = {name: (pair[0], pair[1])
+                          for name, pair in counts.items()}
+                self.persist.save(cached, before[0])
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
+        after = self.versions()
+        self.rebuild_ns = time.perf_counter_ns() - started
+        if after != before:
+            self.clear()
+            return False
+        self.stats = cached
+        self.seq, self.data_version = after
+        self.loaded_from_disk = restored
+        return True
+
+    def persist_batch(self, changes: dict[str, list[int]], next_seq: int) -> None:
+        """Stage new durable Lens inside the same Source write transaction."""
+        if self.persist is None:
+            return
+        if self.stats is None:
+            raise SourceIntegrityError("Lens missing before persistent commit")
+        updated = dict(self.stats)
+        for group, (count_delta, size_delta) in changes.items():
+            count, size = updated.get(group, (0, 0))
+            count += count_delta
+            size += size_delta
+            if count < 0 or size < 0:
+                raise SourceIntegrityError("invalid persistent Lens delta")
+            if count:
+                updated[group] = (count, size)
+            else:
+                updated.pop(group, None)
+        self.persist.save(updated, next_seq)
+
     def get(self, group: str) -> GroupStats:
         if self.valid():
             count, size = self.stats.get(group, (0, 0))
             return GroupStats(count, size, "LENS")
         answer = source_stats(self.db, group)
         try:
-            self.rebuild()
+            if self.persist is None:
+                self.rebuild()
+            else:
+                # An observed outside write invalidates the saved checkpoint.
+                self.restore_or_rebuild(force=True)
         except (sqlite3.DatabaseError, SourceIntegrityError):
             self.clear()
         return answer
