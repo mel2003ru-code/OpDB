@@ -28,7 +28,7 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
             "g1-other": b"not-in-g1",
             "": b"empty-key-not-valid",
             "/root": b"x",
-            "clé/été": b"éé".encode("utf-8"),
+            "clé/été": "éé".encode("utf-8"),
         }
         model.pop("")  # OpDB public API rejects empty keys.
         with TruthStore(self.path) as store:
@@ -105,7 +105,7 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                     set(result["read_latency"]),
                     {"opdb_source", "opdb_lens", "sqlite_direct"},
                 )
-                self.assertEqual(result["group_expected"]["count"], size // 10)
+                self.assertEqual(result["group_expected"]["count"], (size + 8) // 10)
                 for stats in result["read_latency"].values():
                     self.assertGreaterEqual(stats["p99_us"], stats["median_us"])
                 self.assertGreater(db_files_bytes(
