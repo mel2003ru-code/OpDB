@@ -1,4 +1,6 @@
-# Task register
+# Task register (historical)
+
+The live queue is [BACKLOG.md](BACKLOG.md). This table is kept as a record of the first workstream setup.
 
 Snapshot: 2026-11-08. Workstream chats were created and tasks were assigned; their execution outcomes have NOT been independently checked.
 
