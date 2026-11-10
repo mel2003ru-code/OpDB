@@ -3,7 +3,8 @@
 `TruthStore(path, lens=True)` enables the new experimental group-count Lens.
 The default remains `lens=False` so the 43 existing Core Source-only tests and
 older callers are unchanged. `get`, `scan` and `snapshot` **always** read Source;
-only `group_stats(group)` may return `served_from="LENS"`NaN`GroupStats` reports row count, sum of BLOB byte lengths and read path.
+only `group_stats(group)` may return `served_from="LENS"`.
+`GroupStats` reports row count, sum of BLOB byte lengths and read path.
 `group_stats_source` computes the result from Source rows, independently of
 Lens state. Empty groups return `(0, 0)`; key `/x` belongs to group `""`.
 

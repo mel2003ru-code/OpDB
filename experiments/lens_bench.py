@@ -43,13 +43,18 @@ def write_rates(path, enabled, puts, batches):
         for i in range(puts):
             store.put(f'bench/{i:08d}', b'a' * 100)
         put_rate = puts / (time.perf_counter() - start)
+        durations_ns = []
         start = time.perf_counter()
         for batch in range(batches):
-            store.apply([('put', f'batch{batch}/{i:08d}', b'b' * 100)
-                         for i in range(1000)])
+            operations = [('put', f'batch{batch}/{i:08d}', b'b' * 100)
+                          for i in range(1000)]
+            batch_start = time.perf_counter_ns()
+            store.apply(operations)
+            durations_ns.append(time.perf_counter_ns() - batch_start)
         apply_rate = batches * 1000 / (time.perf_counter() - start)
     return {"put_rows_s": round(put_rate, 1),
-            "apply_1000_rows_s": round(apply_rate, 1)}
+            "apply_1000_rows_s": round(apply_rate, 1),
+            "apply_1000_median_ms": round(statistics.median(durations_ns) / 1e6, 3)}
 
 
 def run(size, root, reads, puts, batches):
@@ -92,8 +97,10 @@ def main():
     parser.add_argument('--sizes', type=int, nargs='+', default=[10000, 100000, 1000000])
     parser.add_argument('--reads', type=int, default=30)
     parser.add_argument('--puts', type=int, default=100)
-    parser.add_argument('--batches', type=int, default=4)
+    parser.add_argument('--batches', type=int, default=30)
     opts = parser.parse_args()
+    if opts.batches < 1:
+        parser.error("--batches must be positive")
     print(json.dumps({"machine": platform.platform(), "python": platform.python_version(),
                       "sqlite": sqlite3.sqlite_version, "cpu": platform.processor(),
                       "logical_cpus": os.cpu_count(), "measurement": "local-file SQLite, warm reads; tracemalloc"}))
