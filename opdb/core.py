@@ -1,8 +1,8 @@
-"""OpDB Core experiment 0.1: SQLite-backed authoritative KV and disposable Lens.
+"""OpDB Core experiment 0.1: authoritative SQLite KV, opt-in group Lens.
 
-Not a native DBMS, no SQL compatibility, no verified change capture.
-All user reads use SQLite directly. No derived-Lens admission exists because
-external privileged writers can bypass/forge SQLite trigger logs (P0 #21).
+Not a native DBMS and no SQL compatibility. get/scan/snapshot remain Source
+reads; the engine-owned group Lens uses ADR-006 single-writer assumptions.
+External privileged file modifications are outside the supported threat model.
 """
 from __future__ import annotations
 
@@ -103,9 +103,8 @@ def _source_row(row: tuple) -> tuple[str, bytes]:
 class TruthStore:
     """Single-process research API. SQLite remains authoritative.
 
-    An untrusted external SQLite connection may mutate the database. This API
-    does NOT assume it can authenticate that writer, detect forged journals,
-    or safely authorize accelerated reads. Therefore all read paths are Source.
+    All legacy reads remain Source-only. The opt-in aggregate Lens is version
+    checked and disposable, not authenticated against privileged file writers.
     """
 
     def __init__(self, path: str | Path, *, lens: bool = False):
@@ -340,11 +339,11 @@ class TruthStore:
                 and candidate.source_digest_sha256 == actual.digest_sha256)
 
     def admit_lens(self, candidate: LensCandidate) -> Admission:
-        """Unconditionally fail closed until Safety provides trusted capture."""
+        """Legacy arbitrary row candidate cannot enter the managed group Lens."""
         if not isinstance(candidate, LensCandidate):
             raise TypeError("candidate must be a LensCandidate")
         return Admission(
             accepted=False,
             mode="SOURCE_ONLY",
-            reason="UNTRUSTED_CAPTURE_P0_21: no trusted commit journal/cutover proof",
+            reason="ROW_CANDIDATE_UNSUPPORTED: use managed group_stats Lens",
         )
