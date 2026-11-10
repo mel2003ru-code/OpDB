@@ -105,7 +105,7 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                 self.assertEqual(result["reads_per_mode"], 7)
                 self.assertEqual(
                     set(result["read_latency"]),
-                    {"opdb_source", "opdb_lens", "sqlite_direct"},
+                    {"opdb_source", "opdb_lens", "sqlite_direct", "sqlite_maintained"},
                 )
                 self.assertEqual(result["group_expected"]["count"], (size + 8) // 10)
                 for stats in result["read_latency"].values():
@@ -152,7 +152,7 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                 self.assertEqual(result["checks"], "PASS")
                 self.assertEqual(
                     set(result["modes"]),
-                    {"source", "lens", "sqlite_direct"},
+                    {"source", "lens", "sqlite_direct", "sqlite_maintained"},
                 )
                 self.assertEqual(result["batches"], 20)
                 print("LAB001_WRITES=" + json.dumps(result, sort_keys=True),
