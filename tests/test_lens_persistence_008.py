@@ -39,6 +39,19 @@ class PersistedLensTests(unittest.TestCase):
                 ).fetchall()
             self.assertEqual(dict(got), model)
 
+    def test_one_time_full_cold_open_m3_evidence(self):
+        # One bounded research run; to be opt-in after first evidence.
+        import json
+        from experiments.lens_persistence_bench import sample
+        for size in (10_000, 100_000, 1_000_000):
+            with self.subTest(rows=size):
+                result = sample(size, Path(self.tmp.name), repeat=20)
+                self.assertEqual(result["checks"], "PASS")
+                self.assertLess(result["reopen_median_ms"],
+                                result["first_persistent_build_ms"])
+                print("M3_BENCH=" + json.dumps(result, sort_keys=True),
+                      flush=True)
+
     def test_default_modes_do_not_create_disk_cache(self):
         with self.assertRaises(ValueError):
             TruthStore(self.path, persist_lens=True)
