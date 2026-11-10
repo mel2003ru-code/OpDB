@@ -124,6 +124,21 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
         )
         print("LAB001_CI_SMOKE=" + json.dumps(result, sort_keys=True), flush=True)
 
+    def test_research_large_100k_1m_one_time_ci_evidence(self):
+        # Bounded single research run. Convert to explicit opt-in after
+        # collecting evidence; do not burden every future main push.
+        for size in (100_000, 1_000_000):
+            with self.subTest(size=size):
+                result = run_case(self.root, size, 1729, reads=60)
+                self.assertEqual(
+                    result["checks"]["python_vs_opdb_source_vs_lens_vs_sqlite"],
+                    "PASS",
+                )
+                result["files_bytes_after_close"] = db_files_bytes(
+                    self.root / f"lab001-{size}-1729.db"
+                )
+                print("LAB001_LARGE=" + json.dumps(result, sort_keys=True), flush=True)
+
     def test_invalid_or_empty_measurements_fail(self):
         with self.assertRaises(ValueError):
             distribution_ns([])
