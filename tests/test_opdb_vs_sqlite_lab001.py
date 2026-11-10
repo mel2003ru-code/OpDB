@@ -1,5 +1,6 @@
 """Independent small-fixture controls for LAB-001; no production DB access."""
 import json
+import os
 import random
 import sqlite3
 import tempfile
@@ -124,6 +125,8 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
         )
         print("LAB001_CI_SMOKE=" + json.dumps(result, sort_keys=True), flush=True)
 
+    @unittest.skipUnless(os.getenv("OPDB_LAB_FULL") == "1",
+                         "Full-size research opt-in; run with OPDB_LAB_FULL=1")
     def test_research_large_100k_1m_one_time_ci_evidence(self):
         # Bounded single research run. Convert to explicit opt-in after
         # collecting evidence; do not burden every future main push.
@@ -155,6 +158,8 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                 print("LAB001_WRITES=" + json.dumps(result, sort_keys=True),
                       flush=True)
 
+    @unittest.skipUnless(os.getenv("OPDB_LAB_FULL") == "1",
+                         "Full-size research opt-in; run with OPDB_LAB_FULL=1")
     def test_large_write_100k_1m_one_time_ci_evidence(self):
         # Collect research evidence once; make this opt-in after the run.
         for size in (100_000, 1_000_000):
