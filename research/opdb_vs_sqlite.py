@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import shutil
 import sqlite3
 import statistics
 import subprocess
@@ -172,6 +173,116 @@ def run_case(root: Path, size: int, seed: int, reads: int = 100,
             lens.close()
         if source is not None:
             source.close()
+
+
+
+def write_comparison(root: Path, size: int, seed: int, *,
+                     batches: int = 12, batch_size: int = 1000,
+                     workload: str = "overwrite") -> dict:
+    """Compare identical committed batches; do not include fixture setup in timing."""
+    if workload not in ("append", "overwrite") or size < batch_size:
+        raise ValueError("Unsupported workload or insufficient initial rows")
+    if not 1 <= batch_size <= 1000 or not 1 <= batches <= 60:
+        raise ValueError("Bound batch sizes/counts")
+    base = root / f"write-base-{workload}-{size}-{seed}.db"
+    expected = {g: list(p) for g, p in build_fixture(base, size, seed).items()}
+    old: dict[str, int] = {}
+    if workload == "overwrite":
+        with sqlite3.connect(base) as raw:
+            for index in range(batch_size):
+                key = f"g{index % 10}/{index:09d}"
+                row = raw.execute(
+                    "SELECT length(v) FROM opdb_source_kv WHERE k=?", (key,)
+                ).fetchone()
+                if row is None:
+                    raise AssertionError("Missing initial overwrite key")
+                old[key] = row[0]
+    rng = random.Random(seed + 99)
+    work = []
+    for batch in range(batches):
+        operations = []
+        for index in range(batch_size):
+            key = (f"new/{batch:06d}/{index:06d}" if workload == "append"
+                   else f"g{index % 10}/{index:09d}")
+            value = bytes((rng.randrange(256),)) * rng.randrange(65)
+            group = key.split("/", 1)[0]
+            pair = expected.setdefault(group, [0, 0])
+            previous = old.get(key)
+            if previous is None:
+                pair[0] += 1
+            else:
+                pair[1] -= previous
+            pair[1] += len(value)
+            old[key] = len(value)
+            operations.append(("put", key, value))
+        work.append(operations)
+
+    readings = {}
+    for mode in ("source", "lens", "sqlite_direct"):
+        target = root / f"write-{workload}-{size}-{seed}-{mode}.db"
+        shutil.copyfile(base, target)
+        samples = []
+        started = time.perf_counter_ns()
+        if mode == "sqlite_direct":
+            connection = sqlite3.connect(
+                target, isolation_level=None, cached_statements=0
+            )
+            try:
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA synchronous=FULL")
+                open_ms = (time.perf_counter_ns() - started) / 1e6
+                for operations in work:
+                    start = time.perf_counter_ns()
+                    connection.execute("BEGIN IMMEDIATE")
+                    try:
+                        for _, key, value in operations:
+                            connection.execute(
+                                "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
+                                "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                                (key, value),
+                            )
+                        connection.execute(
+                            "UPDATE opdb_meta SET commit_seq=commit_seq+1 "
+                            "WHERE singleton=1"
+                        )
+                        connection.execute("COMMIT")
+                    except BaseException:
+                        connection.execute("ROLLBACK")
+                        raise
+                    samples.append(time.perf_counter_ns() - start)
+                for group, pair in expected.items():
+                    if raw_sqlite_stats(connection, group) != tuple(pair):
+                        raise AssertionError(f"SQLite write mismatch: {group}")
+            finally:
+                connection.close()
+        else:
+            store = TruthStore(target, lens=(mode == "lens"))
+            try:
+                open_ms = (time.perf_counter_ns() - started) / 1e6
+                for operations in work:
+                    start = time.perf_counter_ns()
+                    store.apply(operations)
+                    samples.append(time.perf_counter_ns() - start)
+                for group, pair in expected.items():
+                    source = store.group_stats_source(group)
+                    answer = store.group_stats(group)
+                    for result in (source, answer):
+                        if (result.row_count, result.value_bytes) != tuple(pair):
+                            raise AssertionError(f"{mode} write mismatch: {group}")
+                if mode == "lens" and not store.lens_enabled:
+                    raise AssertionError("Lens silently disabled after writes")
+            finally:
+                store.close()
+        readings[mode] = {
+            "open_ms": round(open_ms, 3),
+            "batch_latency": distribution_ns(samples),
+        }
+    return {
+        "rows": size, "batches": batches, "batch_size": batch_size,
+        "workload": workload, "oracle": "Python model + independent SQL/Source",
+        "checks": "PASS", "modes": readings,
+        "limitation": "All three use SQLite; direct SQL performs fewer API checks",
+    }
 
 
 def main() -> None:
