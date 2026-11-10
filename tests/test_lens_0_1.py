@@ -54,6 +54,9 @@ class LensTests(unittest.TestCase):
         # 20 separate seeded streams x 2,000 batches/ops; every touched
         # group checked on every iteration against a fresh Python dict oracle.
         for seed in range(20):
+            self.db.close()
+            self.path = str(Path(self.folder.name) / f'seed-{seed}.db')
+            self.db = TruthStore(self.path, lens=True)
             rng = random.Random(20261110 + seed)
             model = {}
             groups = set()
