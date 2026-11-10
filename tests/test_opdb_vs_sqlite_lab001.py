@@ -155,6 +155,19 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                 print("LAB001_WRITES=" + json.dumps(result, sort_keys=True),
                       flush=True)
 
+    def test_large_write_100k_1m_one_time_ci_evidence(self):
+        # Collect research evidence once; make this opt-in after the run.
+        for size in (100_000, 1_000_000):
+            for kind in ("append", "overwrite"):
+                with self.subTest(size=size, kind=kind):
+                    result = write_comparison(
+                        self.root, size, 1729, batches=12,
+                        batch_size=1000, workload=kind
+                    )
+                    self.assertEqual(result["checks"], "PASS")
+                    print("LAB001_LARGE_WRITES=" +
+                          json.dumps(result, sort_keys=True), flush=True)
+
     def test_invalid_or_empty_measurements_fail(self):
         with self.assertRaises(ValueError):
             distribution_ns([])
