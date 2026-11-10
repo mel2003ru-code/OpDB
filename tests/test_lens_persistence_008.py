@@ -39,6 +39,8 @@ class PersistedLensTests(unittest.TestCase):
                 ).fetchall()
             self.assertEqual(dict(got), model)
 
+    @unittest.skipUnless(os.getenv("OPDB_M3_FULL") == "1",
+                         "One million row research check is opt-in")
     def test_one_time_full_cold_open_m3_evidence(self):
         # One bounded research run; to be opt-in after first evidence.
         import json
