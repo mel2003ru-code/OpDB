@@ -25,6 +25,10 @@ OpDB (formerly MELDB) is an open research project aiming to create a reliable, a
 
 No direct changes to production servers or existing production databases. Core and Safety submit independent branches. Quality independently verifies claims. Nothing merges solely on a benchmark win.
 
-The repository starts with coordination documents; the executable engine is not yet present. The project's architecture decisions and experiments are incorporated only after verifying their source and provenance. A public release license has not been selected.
+The repository starts with coordination documents; the executable engine is not yet present. The project's architecture decisions and experiments are incorporated only after verifying their source and provenance.
 
 Repository coordination: OpDB Headquarters.
+
+## License
+
+OpDB is released under the [Apache License 2.0](LICENSE).
