@@ -1,4 +1,4 @@
-"""TASK-006 local-file Lens vs Source microbench; no cross-engine claims.
+"""TASK-006/007 local-file Lens vs Source microbench; no cross-engine claims.
 
 Run: python experiments/lens_bench.py [--sizes 10000 100000 1000000]
 """
@@ -44,12 +44,17 @@ def write_rates(path, enabled, puts, batches):
             store.put(f'bench/{i:08d}', b'a' * 100)
         put_rate = puts / (time.perf_counter() - start)
         start = time.perf_counter()
+        batch_times = []
         for batch in range(batches):
-            store.apply([('put', f'batch{batch}/{i:08d}', b'b' * 100)
-                         for i in range(1000)])
+            operations = [('put', f'batch{batch}/{i:08d}', b'b' * 100)
+                          for i in range(1000)]
+            before = time.perf_counter_ns()
+            store.apply(operations)
+            batch_times.append(time.perf_counter_ns() - before)
         apply_rate = batches * 1000 / (time.perf_counter() - start)
     return {"put_rows_s": round(put_rate, 1),
-            "apply_1000_rows_s": round(apply_rate, 1)}
+            "apply_1000_rows_s": round(apply_rate, 1),
+            "apply_1000_median_ms": round(statistics.median(batch_times) / 1e6, 3)}
 
 
 def run(size, root, reads, puts, batches):
@@ -77,8 +82,13 @@ def run(size, root, reads, puts, batches):
         shutil.copyfile(base, work)
         rates['lens' if enabled else 'source'] = write_rates(work, enabled, puts, batches)
     overhead = {key: round(100 * (rates['source'][key] / rates['lens'][key] - 1), 1)
-                for key in rates['source']}
+                for key in ('put_rows_s', 'apply_1000_rows_s')}
+    # Comparing per-batch durations is less sensitive to Python list setup.
+    overhead['apply_1000_median_ms'] = round(100 * (
+        rates['lens']['apply_1000_median_ms'] /
+        rates['source']['apply_1000_median_ms'] - 1), 1)
     result = {"rows": size, "value_bytes": 100, "reads": reads,
+              "batches": batches,
               "source": source_result, "lens": lens_result,
               "lens_rebuild_ms": rebuild_ms, "lens_peak_tracemalloc_bytes": peak,
               "write_rates": rates, "write_overhead_percent": overhead}
@@ -92,8 +102,10 @@ def main():
     parser.add_argument('--sizes', type=int, nargs='+', default=[10000, 100000, 1000000])
     parser.add_argument('--reads', type=int, default=30)
     parser.add_argument('--puts', type=int, default=100)
-    parser.add_argument('--batches', type=int, default=4)
+    parser.add_argument('--batches', type=int, default=30)
     opts = parser.parse_args()
+    if opts.batches < 1:
+        parser.error('--batches must be at least 1')
     print(json.dumps({"machine": platform.platform(), "python": platform.python_version(),
                       "sqlite": sqlite3.sqlite_version, "cpu": platform.processor(),
                       "logical_cpus": os.cpu_count(), "measurement": "local-file SQLite, warm reads; tracemalloc"}))
