@@ -1,4 +1,5 @@
 """Independent small-fixture controls for LAB-001; no production DB access."""
+import json
 import random
 import sqlite3
 import tempfile
@@ -111,6 +112,17 @@ class OpDBSQLiteComparisonTests(unittest.TestCase):
                 self.assertGreater(db_files_bytes(
                     self.root / f"lab001-{size}-{seed}.db"
                 )["db"], 0)
+
+    def test_10k_smoke_emits_results_without_speed_claims(self):
+        # Useful reproducible inputs; noisy hosted CI timings are NOT an SLA.
+        result = run_case(self.root, 10000, 1729, reads=30)
+        result["files_bytes_after_close"] = db_files_bytes(
+            self.root / "lab001-10000-1729.db"
+        )
+        self.assertEqual(
+            result["checks"]["python_vs_opdb_source_vs_lens_vs_sqlite"], "PASS"
+        )
+        print("LAB001_CI_SMOKE=" + json.dumps(result, sort_keys=True), flush=True)
 
     def test_invalid_or_empty_measurements_fail(self):
         with self.assertRaises(ValueError):
