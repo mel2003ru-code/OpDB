@@ -3,7 +3,8 @@
 `TruthStore(path, lens=True)` enables the new experimental group-count Lens.
 The default remains `lens=False` so the 43 existing Core Source-only tests and
 older callers are unchanged. `get`, `scan` and `snapshot` **always** read Source;
-only `group_stats(group)` may return `served_from="LENS"`NaN`GroupStats` reports row count, sum of BLOB byte lengths and read path.
+only `group_stats(group)` may return `served_from="LENS"`. `GroupStats`
+reports row count, sum of BLOB byte lengths and read path.
 `group_stats_source` computes the result from Source rows, independently of
 Lens state. Empty groups return `(0, 0)`; key `/x` belongs to group `""`.
 
@@ -11,9 +12,13 @@ Lens state. Empty groups return `(0, 0)`; key `/x` belongs to group `""`.
 increments it in its SQLite data transaction. When Lens is enabled, each batch
 computes old/new per-group deltas inside the transaction; only a successful
 `COMMIT` advances the in-memory Lens. Rollback never publishes a delta.
-Opening with Lens enabled rebuilds from one SQLite snapshot. A mismatch in
-`commit_seq` or connection-local SQLite `PRAGMA data_version` discards Lens:
-that call reads Source, then rebuilds for subsequent Lens reads.
+The old lengths are fetched once per distinct key, in lookup chunks of at most
+500 keys, and repeated edits to a key are tracked in memory.
+Opening with Lens enabled rebuilds from one SQLite snapshot. If a Source row
+violates the typed contract, the store stays open with Lens disabled; reads of
+that damaged row still fail with `SourceIntegrityError`.
+A mismatch in `commit_seq` or connection-local SQLite `PRAGMA data_version`
+discards Lens: that call reads Source, then rebuilds for subsequent Lens reads.
 
 **Trust boundary:** ADR-006 assumes OpDB is the single writer. External raw
 SQLite writes are outside this model; `data_version`/sequence checks are only

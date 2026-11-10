@@ -134,7 +134,12 @@ class TruthStore:
             if lens:
                 from .lens import AggregateLens
                 self._lens = AggregateLens(self._db)
-                self._lens.rebuild()
+                try:
+                    self._lens.rebuild()
+                except SourceIntegrityError:
+                    # Invalid Source content must never activate an aggregate.
+                    # The normal Source API remains available for healthy rows.
+                    self._lens = None
         except BaseException:
             self._db.close()
             self._closed = True
@@ -204,21 +209,33 @@ class TruthStore:
                 changes = {}
                 if tracking:
                     from .lens import _metric, group_of
+                    # One lookup per <=500 DISTINCT keys, inside BEGIN IMMEDIATE.
+                    # None means absent; zero is a valid existing BLOB length.
+                    lengths = dict.fromkeys(item[1] for item in checked)
+                    keys = tuple(lengths)
+                    for start in range(0, len(keys), 500):
+                        chunk = keys[start:start + 500]
+                        placeholders = ",".join("?" for _ in chunk)
+                        for row in self._db.execute(
+                            "SELECT k,typeof(v),length(v) FROM opdb_source_kv "
+                            f"WHERE k IN ({placeholders})", chunk
+                        ):
+                            key, size = _metric(row)
+                            lengths[key] = size
                 for item in checked:
                     if tracking:
-                        previous = self._db.execute(
-                            "SELECT k,typeof(v),length(v) FROM opdb_source_kv WHERE k=?",
-                            (item[1],),
-                        ).fetchone()
                         group = group_of(item[1])
                         delta = changes.setdefault(group, [0, 0])
-                        if previous is not None:
-                            _, old_length = _metric(previous)
+                        old_length = lengths[item[1]]
+                        if old_length is not None:
                             delta[0] -= 1
                             delta[1] -= old_length
                         if item[0] == "put":
                             delta[0] += 1
                             delta[1] += len(item[2])
+                        # The next operation on this key observes this write.
+                        lengths[item[1]] = (len(item[2]) if item[0] == "put"
+                                            else None)
                     if item[0] == "put":
                         self._db.execute(
                             "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
