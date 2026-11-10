@@ -31,6 +31,8 @@ For every open, non-draft pull request that implements a backlog task:
    - **Request changes** with one comment listing concrete defects. After
      the third rejected round for the same task, mark it `BLOCKED_OWNER`.
 4. Never merge a pull request you wrote in the same run.
+5. If two open pull requests implement the same task, review both, merge
+   the more complete one and close the other with a comment linking to it.
 
 ### 2. Fix a rejected pull request
 
@@ -43,6 +45,11 @@ If no task pull request is open, take the first `READY` row of
 `workstreams/BACKLOG.md`, set it to `IN_PROGRESS`, and implement its task
 file as **one** pull request against `main`. Put test results and any
 measurements, with the machine description, in the pull request text.
+
+Runs can overlap. Name the branch `task-NNN-...`, and immediately before
+opening the pull request list open pull requests again: if another one for
+the same task now exists, do not open yours — delete your branch and say so
+in the journal.
 
 ### 4. Plan
 
