@@ -107,7 +107,10 @@ class TruthStore:
     checked and disposable, not authenticated against privileged file writers.
     """
 
-    def __init__(self, path: str | Path, *, lens: bool = False):
+    def __init__(self, path: str | Path, *, lens: bool = False,
+                 persist_lens: bool = False):
+        if persist_lens and not lens:
+            raise ValueError("persist_lens requires lens=True")
         path = str(path)
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, timeout=5, isolation_level=None,
@@ -133,9 +136,12 @@ class TruthStore:
             )
             if lens:
                 from .lens import AggregateLens
-                self._lens = AggregateLens(self._db)
+                self._lens = AggregateLens(self._db, persistent=persist_lens)
                 try:
-                    self._lens.rebuild()
+                    if persist_lens:
+                        self._lens.restore_or_rebuild()
+                    else:
+                        self._lens.rebuild()
                 except SourceIntegrityError:
                     # Invalid Source content must never activate an aggregate.
                     # The normal Source API remains available for healthy rows.
@@ -252,6 +258,9 @@ class TruthStore:
                 next_seq = self._db.execute(
                     "SELECT commit_seq FROM opdb_meta WHERE singleton=1"
                 ).fetchone()[0]
+                # Disk Lens is updated BEFORE COMMIT in this SAME Source tx.
+                if tracking and self._lens is not None:
+                    self._lens.persist_batch(changes, next_seq)
                 self._db.execute("COMMIT")
             except BaseException:
                 self._db.execute("ROLLBACK")
@@ -262,7 +271,10 @@ class TruthStore:
                 else:
                     self._lens.clear()
                     try:
-                        self._lens.rebuild()
+                        if self._lens.persist is not None:
+                            self._lens.restore_or_rebuild(force=True)
+                        else:
+                            self._lens.rebuild()
                     except (sqlite3.DatabaseError, SourceIntegrityError):
                         self._lens.clear()
 
