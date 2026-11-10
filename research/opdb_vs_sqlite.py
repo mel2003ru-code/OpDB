@@ -22,6 +22,7 @@ import tempfile
 import time
 
 from opdb import TruthStore
+from research.sqlite_maintained import install_maintained_summary, maintained_stats
 
 
 def checked_out_sha() -> str:
@@ -107,7 +108,11 @@ def run_case(root: Path, size: int, seed: int, reads: int = 100,
     model = build_fixture(path, size, seed)
     construction_ms = (time.perf_counter_ns() - start) / 1e6
 
-    source = lens = raw = None
+    # Same logical Source rows; the maintained baseline must not alter
+    # the OpDB source file or invalidate its in-memory Lens.
+    maintained_path = root / f"lab001-maintained-{size}-{seed}.db"
+    shutil.copyfile(path, maintained_path)
+    source = lens = raw = maintained = None
     try:
         start = time.perf_counter_ns()
         source = TruthStore(path, lens=False)
@@ -119,16 +124,24 @@ def run_case(root: Path, size: int, seed: int, reads: int = 100,
         raw = sqlite3.connect(path, cached_statements=0)
         raw_open_ms = (time.perf_counter_ns() - start) / 1e6
 
+        start = time.perf_counter_ns()
+        maintained = sqlite3.connect(
+            maintained_path, isolation_level=None, cached_statements=0
+        )
+        install_maintained_summary(maintained)
+        maintained_build_ms = (time.perf_counter_ns() - start) / 1e6
+
         oracle = model.get(group, (0, 0))
         from_source = source.group_stats_source(group)
         from_lens = lens.group_stats(group)
         from_sql = raw_sqlite_stats(raw, group)
+        from_maintained = maintained_stats(maintained, group)
         source_pair = (from_source.row_count, from_source.value_bytes)
         lens_pair = (from_lens.row_count, from_lens.value_bytes)
-        if not (oracle == source_pair == lens_pair == from_sql):
+        if not (oracle == source_pair == lens_pair == from_sql == from_maintained):
             raise AssertionError(
                 f"Oracle mismatch: python={oracle}, source={source_pair}, "
-                f"lens={lens_pair}, sqlite={from_sql}"
+                f"lens={lens_pair}, sqlite={from_sql}, maintained={from_maintained}"
             )
         if from_source.served_from != "SOURCE" or from_lens.served_from != "LENS":
             raise AssertionError("Unexpected read path: not actually testing Lens")
@@ -137,6 +150,7 @@ def run_case(root: Path, size: int, seed: int, reads: int = 100,
             "opdb_source": lambda: source.group_stats_source(group),
             "opdb_lens": lambda: lens.group_stats(group),
             "sqlite_direct": lambda: raw_sqlite_stats(raw, group),
+            "sqlite_maintained": lambda: maintained_stats(maintained, group),
         }
         samples = {name: [] for name in methods}
         names = list(methods)
@@ -146,7 +160,7 @@ def run_case(root: Path, size: int, seed: int, reads: int = 100,
                 started = time.perf_counter_ns()
                 result = methods[name]()
                 elapsed = time.perf_counter_ns() - started
-                got = (result.row_count, result.value_bytes) if name != "sqlite_direct" else result
+                got = (result.row_count, result.value_bytes) if name.startswith("opdb_") else result
                 if got != oracle:
                     raise AssertionError(f"Changed answer during read loop: {name}")
                 samples[name].append(elapsed)
@@ -155,18 +169,22 @@ def run_case(root: Path, size: int, seed: int, reads: int = 100,
             "group": group,
             "group_expected": {"count": oracle[0], "value_bytes": oracle[1]},
             "checks": {"python_vs_opdb_source_vs_lens_vs_sqlite": "PASS",
+                       "sqlite_maintained_oracle": "PASS",
                        "lens_served_from": from_lens.served_from},
             "construction_ms": round(construction_ms, 3),
             "open_ms": {
                 "opdb_source": round(source_open_ms, 3),
                 "opdb_lens_includes_full_rebuild": round(lens_open_ms, 3),
                 "sqlite_direct": round(raw_open_ms, 3),
+                "sqlite_maintained_includes_build": round(maintained_build_ms, 3),
             },
             "reads_per_mode": reads,
             "read_latency": {name: distribution_ns(times)
                              for name, times in samples.items()},
         }
     finally:
+        if maintained is not None:
+            maintained.close()
         if raw is not None:
             raw.close()
         if lens is not None:
@@ -218,12 +236,12 @@ def write_comparison(root: Path, size: int, seed: int, *,
         work.append(operations)
 
     readings = {}
-    for mode in ("source", "lens", "sqlite_direct"):
+    for mode in ("source", "lens", "sqlite_direct", "sqlite_maintained"):
         target = root / f"write-{workload}-{size}-{seed}-{mode}.db"
         shutil.copyfile(base, target)
         samples = []
         started = time.perf_counter_ns()
-        if mode == "sqlite_direct":
+        if mode in ("sqlite_direct", "sqlite_maintained"):
             connection = sqlite3.connect(
                 target, isolation_level=None, cached_statements=0
             )
@@ -231,6 +249,12 @@ def write_comparison(root: Path, size: int, seed: int, *,
                 connection.execute("PRAGMA journal_mode=WAL")
                 connection.execute("PRAGMA synchronous=FULL")
                 open_ms = (time.perf_counter_ns() - started) / 1e6
+                if mode == "sqlite_maintained":
+                    started_install = time.perf_counter_ns()
+                    install_maintained_summary(connection)
+                    setup_ms = (time.perf_counter_ns() - started_install) / 1e6
+                else:
+                    setup_ms = 0.0
                 for operations in work:
                     start = time.perf_counter_ns()
                     connection.execute("BEGIN IMMEDIATE")
@@ -251,6 +275,9 @@ def write_comparison(root: Path, size: int, seed: int, *,
                         raise
                     samples.append(time.perf_counter_ns() - start)
                 for group, pair in expected.items():
+                    if (mode == "sqlite_maintained"
+                            and maintained_stats(connection, group) != tuple(pair)):
+                        raise AssertionError(f"SQLite maintained mismatch: {group}")
                     if raw_sqlite_stats(connection, group) != tuple(pair):
                         raise AssertionError(f"SQLite write mismatch: {group}")
             finally:
@@ -275,6 +302,7 @@ def write_comparison(root: Path, size: int, seed: int, *,
                 store.close()
         readings[mode] = {
             "open_ms": round(open_ms, 3),
+            "maintenance_setup_ms": round(setup_ms, 3) if mode == "sqlite_maintained" else 0.0,
             "batch_latency": distribution_ns(samples),
         }
     return {
@@ -301,8 +329,8 @@ def main() -> None:
         "checked_out_sha": checked_out_sha(), "seed": args.seed,
         "python": sys.version.split()[0], "sqlite": sqlite3.sqlite_version,
         "platform": platform.platform(), "logical_cpus": os.cpu_count(),
-        "workload": "identical typed KV, warmed aggregate reads; no write benchmark",
-        "limitation": "SQLite baseline does not perform OpDB integrity validation",
+        "workload": "identical typed KV; warmed aggregate reads, optionally writes",
+        "limitation": "SQLite baselines do not perform OpDB integrity validation",
     }), flush=True)
     with tempfile.TemporaryDirectory(prefix="opdb-lab001-") as directory:
         root = Path(directory)
@@ -310,6 +338,9 @@ def main() -> None:
             row = run_case(root, size, args.seed, args.reads, args.group)
             path = root / f"lab001-{size}-{args.seed}.db"
             row["files_bytes_after_close"] = db_files_bytes(path)
+            row["maintained_sqlite_files_bytes_after_close"] = db_files_bytes(
+                root / f"lab001-maintained-{size}-{args.seed}.db"
+            )
             print(json.dumps(row), flush=True)
             if args.write:
                 for kind in ("append", "overwrite"):
