@@ -154,6 +154,44 @@ class PersistedLensTests(unittest.TestCase):
             with self.assertRaises(SourceIntegrityError):
                 store.get("bad/x")
 
+    def test_crash_before_commit_keeps_old_source_and_cache(self):
+        with TruthStore(self.path, lens=True, persist_lens=True) as store:
+            store.put("g1/a", b"old")
+        script = (
+            "import os,sys;"
+            "from opdb import TruthStore;"
+            "s=TruthStore(sys.argv[1],lens=True,persist_lens=True);"
+            "s._db.execute('BEGIN IMMEDIATE');"
+            "s._db.execute('UPDATE opdb_source_kv SET v=? WHERE k=?',"
+            "(b'not-committed','g1/a'));"
+            "s._db.execute('UPDATE opdb_lens_state_v1 SET source_seq=-1');"
+            "os._exit(19)"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script, str(self.path)],
+            cwd=Path(__file__).resolve().parents[1],
+            timeout=15, check=False,
+        )
+        self.assertEqual(proc.returncode, 19)
+        with patch("opdb.lens._metric", side_effect=AssertionError("Source scan")):
+            with TruthStore(self.path, lens=True, persist_lens=True) as reopened:
+                self.assertTrue(reopened._lens.loaded_from_disk)
+                self.assertEqual(reopened.get("g1/a"), b"old")
+                self.assertEqual(reopened.group_stats("g1").value_bytes, 3)
+
+    def test_checksum_field_tamper_forces_rebuild(self):
+        with TruthStore(self.path, lens=True, persist_lens=True) as store:
+            store.put("g1/a", b"one")
+        with sqlite3.connect(self.path) as raw:
+            raw.execute(
+                "UPDATE opdb_lens_state_v1 SET checksum=? WHERE singleton=1",
+                ("0" * 64,),
+            )
+        with TruthStore(self.path, lens=True, persist_lens=True) as reopened:
+            self.assertFalse(reopened._lens.loaded_from_disk)
+            self.assertTrue(reopened.lens_enabled)
+            self.assertEqual(reopened.group_stats("g1").value_bytes, 3)
+
     def test_crash_after_commit_before_memory_publish(self):
         with TruthStore(self.path, lens=True, persist_lens=True) as store:
             store.put("g1/a", b"old")
