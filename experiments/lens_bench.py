@@ -65,8 +65,9 @@ def _existing_key(index):
 def _scenario_batch(kind, batch):
     overwrite_value = b'Y' * (61 + (batch % 7) * 7)
     if kind == 'overwrite':
-        return ([('put', _existing_key(i), overwrite_value)
-                 for i in range(1000)], [])
+        keys = [_existing_key(i) for i in range(1000)]
+        return ([('put', key, overwrite_value) for key in keys],
+                [('put', key, b'X' * 100) for key in keys])
     if kind == 'delete':
         keys = [_existing_key(i) for i in range(1000)]
         return ([('delete', key) for key in keys],
@@ -78,7 +79,11 @@ def _scenario_batch(kind, batch):
                          for i in range(333)]
         delete_keys = [_existing_key(333 + i) for i in range(334)]
         delete_ops = [('delete', key) for key in delete_keys]
-        restore = [('put', key, b'X' * 100) for key in delete_keys]
+        # Undo everything outside the timer: drop the new keys and put the
+        # original value back for overwritten and deleted keys.
+        restore = ([('delete', op[1]) for op in new_ops] +
+                   [('put', _existing_key(i), b'X' * 100) for i in range(333)] +
+                   [('put', key, b'X' * 100) for key in delete_keys])
         return new_ops + overwrite_ops + delete_ops, restore
     raise ValueError(f'unknown scenario: {kind}')
 
@@ -94,7 +99,7 @@ def _measure_scenario(base, root, size, kind, enabled, batches):
             started = time.perf_counter_ns()
             store.apply(operations)
             samples.append(time.perf_counter_ns() - started)
-            # Keep every delete batch at the same starting cardinality; this
+            # Every batch starts from the same rows and values; this
             # restoration is deliberately outside the timed interval.
             if restore:
                 store.apply(restore)
