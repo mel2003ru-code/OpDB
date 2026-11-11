@@ -1,0 +1,192 @@
+name: Foundry gated research preflight
+on:
+  pull_request:
+    paths:
+      - 'foundry/**'
+      - 'tests/test_foundry_control.py'
+      - 'tests/test_foundry_loop.py'
+      - 'tests/test_launch_gate.py'
+      - 'tests/test_agent_executor.py'
+      - 'tests/test_issue_intake.py'
+      - 'tests/test_patch_admission.py'
+      - 'tests/test_sandbox_policy.py'
+      - 'tests/test_model_gate.py'
+      - 'tests/test_worker_contract.py'
+      - 'tests/test_isolated_worker_s008.py'
+      - 'tests/test_s008b2_protocol.py'
+      - 'tests/test_automation_queue.py'
+      - 'tests/test_github_snapshot.py'
+      - 'tests/test_automation_ledger.py'
+      - 'tests/test_review_handoff.py'
+      - '.github/workflows/foundry-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  evidence-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate for isolated verification only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Exercise negative and synthetic victory cases
+        run: python -m unittest -v tests.test_foundry_control tests.test_foundry_loop tests.test_launch_gate tests.test_agent_executor tests.test_issue_intake tests.test_patch_admission tests.test_sandbox_policy tests.test_model_gate tests.test_worker_contract tests.test_isolated_worker_s008 tests.test_s008b2_protocol tests.test_automation_queue tests.test_github_snapshot tests.test_automation_ledger tests.test_review_handoff
+      - name: Verify agent model policy rejects every paid inference path
+        shell: bash
+        run: |
+          python -m foundry.model_gate --expected-sha "$GITHUB_SHA" --offline-demo --output offline-model-policy.json
+          python - <<'PY'
+          import json
+          d=json.load(open("offline-model-policy.json", encoding="utf-8"))
+          assert d["state"] == "OFFLINE_MOCK_POLICY_ONLY"
+          assert d["model_requests_used"] == 0
+          assert d["model_tokens_used"] == 0
+          assert d["model_cost_micro_usd"] == 0
+          assert d["model_invoked"] is False
+          assert d["remote_network_authorized"] is False
+          assert d["model_output_executable"] is False
+          assert d["github_write_allowed"] is False
+          assert d["production_allowed"] is False
+          assert d["launch_authorized"] is False
+          PY
+      - name: Demand explicit NOT_CONFIGURED without real evidence
+        shell: bash
+        run: |
+          python -m foundry.control --output foundry-decision.json
+          python -c 'import json; d=json.load(open("foundry-decision.json")); assert d["state"] == "NOT_CONFIGURED" and not d["production_allowed"] and not d["pause_autonomous_improvements"]'
+      - name: Run fixed-seed reference research for actual report integration
+        run: python -m research.cycle --seed 20261108 --output foundry-research.json
+      - name: Produce one deterministic safe next step from research evidence
+        shell: bash
+        run: |
+          python -m foundry.loop --research foundry-research.json --expected-sha "$GITHUB_SHA" --output foundry-next-step.json
+          python -c 'import json; p=json.load(open("foundry-next-step.json")); assert p["state"] == "REQUEST_EXECUTABLE_ADAPTER" and p["next_issue"] == 3 and not p["automatic_merge_allowed"] and not p["production_deploy_allowed"]'
+      - name: Print machine-readable plan or explicit failure
+        if: always()
+        shell: bash
+        run: |
+          if [ -s foundry-next-step.json ]; then
+            cat foundry-next-step.json
+          else
+            echo "No complete Foundry decision produced (research must not advance)"
+          fi
+      - name: Explicitly forbid launch until real authenticated release evidence
+        shell: bash
+        run: |
+          python -m foundry.launch_gate --output launch-readiness.json
+          python -c 'import json; r=json.load(open("launch-readiness.json")); assert r["state"] == "NOT_READY" and not r["button_enabled"] and not r["launch_authorized"] and not r["launched"] and r["launched_at_utc"] is None'
+      - name: Retrieve actual GitHub tracking Issue #31 (read-only)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/31" > actual-issue-31.json
+      - name: Admit only approved issue metadata, never issue instructions
+        shell: bash
+        run: |
+          python -m foundry.issue_intake --issue-json actual-issue-31.json --expected-sha "$GITHUB_SHA" --output admitted-task.json
+          python -m foundry.agent_executor --task-file admitted-task.json --expected-sha "$GITHUB_SHA" --output admitted-demo.json
+          python -c 'import json; a=json.load(open("admitted-demo.json")); assert a["state"] == "DRAFT_PROPOSAL_READY" and a["negative_control_failed_as_expected"] and a["candidate_tests_passed"] and not a["model_invoked"] and not a["repository_modified"] and not a["pull_request_created"] and not a["production_allowed"] and not a["launch_authorized"]'
+      - name: Controller to offline worker to quarantined review-only data (no execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m foundry.worker_contract --prepare \
+            --task-file admitted-task.json --expected-sha "$GITHUB_SHA" \
+            --output handoff-request.json
+          python -m foundry.worker_contract --offline-mock \
+            --request-file handoff-request.json --expected-sha "$GITHUB_SHA" \
+            --checkout "$GITHUB_WORKSPACE" --output handoff-reply.json
+          python -m foundry.worker_contract --review \
+            --request-file handoff-request.json --reply-file handoff-reply.json \
+            --expected-sha "$GITHUB_SHA" --checkout "$GITHUB_WORKSPACE" \
+            --output handoff-review.json
+          python - <<'PY'
+          import json
+          r=json.load(open("handoff-request.json", encoding="utf-8"))
+          d=json.load(open("handoff-review.json", encoding="utf-8"))
+          assert r["operation"]=="PROPOSE_TEXT_ONLY"
+          assert r["max_model_requests"]==r["max_total_tokens"]==r["max_cost_micro_usd"]==0
+          assert r["network_allowed"] is False
+          assert r["shell_allowed"] is False
+          assert r["execution_allowed"] is False
+          assert r["github_write_allowed"] is False
+          assert d["state"]=="REVIEW_ONLY_PATCH"
+          assert d["candidate_diff_sha256"]
+          assert d["human_review_required"] is True
+          assert d["worker_reply_executed"] is False
+          assert d["model_invoked"] is False
+          assert d["github_write_allowed"] is False
+          assert d["automatic_merge_allowed"] is False
+          assert d["production_allowed"] is False
+          assert d["launch_authorized"] is False
+          print("DATA_ONLY_HANDOFF_PASS — no execution, model, GitHub write or launch")
+          PY
+          python - <<'PY'
+          import json
+          r=json.load(open("handoff-reply.json", encoding="utf-8"))
+          r["command"]="deploy to production"
+          with open("handoff-malicious-reply.json", "w", encoding="utf-8") as f:
+              json.dump(r,f)
+          PY
+          if python -m foundry.worker_contract --review \
+              --request-file handoff-request.json \
+              --reply-file handoff-malicious-reply.json \
+              --expected-sha "$GITHUB_SHA" \
+              --checkout "$GITHUB_WORKSPACE" \
+              --output handoff-refusal.json; then
+            echo "ERROR: injected worker command was not rejected"
+            exit 1
+          fi
+          python -c 'import json; r=json.load(open("handoff-refusal.json")); assert r["state"] == "BLOCKED" and not r["launch_authorized"] and not r["github_write_allowed"]'
+          git diff --exit-code
+      - name: Exercise bounded offline executor on a trusted synthetic task
+        shell: bash
+        run: |
+          python -m foundry.agent_executor --expected-sha "$GITHUB_SHA" --demo-task --output executor-demo.json
+          python -c 'import json; p=json.load(open("executor-demo.json")); assert p["state"] == "DRAFT_PROPOSAL_READY" and p["negative_control_failed_as_expected"] and p["candidate_tests_passed"] and p["candidate_diff_sha256"] and not p["model_invoked"] and not p["repository_modified"] and not p["pull_request_created"] and not p["production_allowed"] and not p["launch_authorized"]'
+          git diff --exit-code
+      - name: Quarantine model-like proposal as data only (never execute candidate)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path("foundry/fixtures/calculator.py")
+          original=root.read_bytes()
+          proposal=original.decode().replace("    return left - right\n", "    return left + right\n")
+          assert proposal.encode()!=original
+          pathlib.Path("proposed-patch.json").write_text(json.dumps({
+            "schema_version":1,"source_sha":os.environ["GITHUB_SHA"],
+            "task_key":"demo-add-v1","issue_number":31,
+            "path":"foundry/fixtures/calculator.py",
+            "original_sha256":hashlib.sha256(original).hexdigest(),
+            "candidate_sha256":hashlib.sha256(proposal.encode()).hexdigest(),
+            "candidate_text":proposal
+          }))
+          PY
+          python -m foundry.patch_admission --proposal proposed-patch.json --expected-sha "$GITHUB_SHA" --checkout . --output quarantine-result.json
+          python -c 'import json; q=json.load(open("quarantine-result.json")); assert q["state"]=="QUARANTINED_FOR_REVIEW" and not q["candidate_executed"] and not q["github_write_allowed"] and not q["sandbox_verified"] and not q["launch_authorized"]'
+          git diff --exit-code
+      - name: Sandbox must be unconfigured without independently pinned local image
+        shell: bash
+        run: |
+          if python -m foundry.sandbox_policy --fixture "$GITHUB_WORKSPACE/foundry/fixtures" > sandbox-policy.json; then
+            echo "ERROR: Unconfigured sandbox must fail closed"
+            exit 1
+          fi
+          python -c 'import json; d=json.load(open("sandbox-policy.json")); assert d["state"]=="BLOCKED" and not d["candidate_executed"] and not d["runtime_verified"] and not d["production_allowed"] and not d["launch_authorized"]'
+      - name: Check absence of untracked files in tracked source folders
+        shell: bash
+        run: |
+          test -z "$(git ls-files --others --exclude-standard -- foundry tests)"
+      - name: Explain trust boundary
+        run: echo "No actual adapter verified, no external benchmark executed, no automatic release, merge or deployment."

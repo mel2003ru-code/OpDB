@@ -1,0 +1,310 @@
+name: Foundry Sandbox — actual fixed probe, no untrusted code
+
+on:
+  pull_request:
+    paths:
+      - 'foundry/sandbox*.py'
+      - 'foundry/fixtures/sandbox_runtime_probe.py'
+      - 'foundry/fixtures/handoff_worker.py'
+      - 'foundry/isolated_worker.py'
+      - 'tests/test_isolated_worker_s008.py'
+      - 'tests/test_sandbox_smoke.py'
+      - 'tests/test_sandbox_policy.py'
+      - 'tests/test_sandbox_negative.py'
+      - 'tests/test_sandbox_adversarial.py'
+      - 'tests/test_sandbox_runner.py'
+      - '.github/workflows/foundry-sandbox-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-runtime-probe:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      # Reviewed PR image lock: observed in fixed probe run #42482546241.
+      # Image digest pin is reproducibility, NOT independent publisher attestation.
+      OPDB_TEST_IMAGE: python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535
+    steps:
+      - name: Checkout candidate code without stored GitHub credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python test runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate safe planning and synthetic failure guards
+        run: python -m unittest -v tests.test_sandbox_policy tests.test_sandbox_smoke tests.test_sandbox_negative tests.test_sandbox_adversarial
+      - name: Confirm disposable Docker daemon available
+        shell: bash
+        run: |
+          docker version --format '{{.Server.Version}}'
+          docker info --format '{{.OSType}}/{{.Architecture}}'
+      - name: Fetch exact reviewed OCI image digest, never moving tag
+        shell: bash
+        run: |
+          docker pull --platform linux/amd64 "$OPDB_TEST_IMAGE"
+          docker image inspect "$OPDB_TEST_IMAGE" --format '{{json .RepoDigests}}'
+      - name: Execute ONLY fixed reviewed confinement fixture in a real container
+        shell: bash
+        run: |
+          python -m foundry.sandbox_smoke \
+            --image "$OPDB_TEST_IMAGE" \
+            --fixture "$GITHUB_WORKSPACE/foundry/fixtures" \
+            --output fixed-sandbox-evidence.json
+          python - <<'PY'
+          import json
+          with open("fixed-sandbox-evidence.json", encoding="utf-8") as stream:
+              report = json.load(stream)
+          assert report["state"] == "OBSERVED_FIXED_PROBE_PASS"
+          assert report["runtime_confinement_observed"] is True
+          assert len(report["checks"]) == 11
+          assert all(value is True for value in report["checks"].values())
+          assert report["untrusted_model_code_allowed"] is False
+          assert report["candidate_executed"] is False
+          assert report["github_write_allowed"] is False
+          assert report["production_allowed"] is False
+          assert report["automatic_merge_allowed"] is False
+          assert report["launch_authorized"] is False
+          PY
+      - name: Negative control — intentionally remove read-only root flag
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          from foundry.sandbox_policy import plan
+          policy = plan(
+              os.environ["OPDB_TEST_IMAGE"],
+              str(Path(os.environ["GITHUB_WORKSPACE"]) / "foundry" / "fixtures"),
+              12, probe="confinement",
+          )
+          assert policy["state"] == "POLICY_PLAN_ONLY"
+          argv = [arg for arg in policy["command_argv"] if arg != "--read-only"]
+          assert len(argv) == len(policy["command_argv"]) - 1
+          result = subprocess.run(argv, capture_output=True, text=True, timeout=12)
+          report = json.loads(result.stdout.strip())
+          assert result.returncode != 0
+          assert report["probe"] == "synthetic-fixed-review-only"
+          assert report["passed"] is False
+          assert report["checked"]["root_filesystem_read_only"] is False
+          assert report["checked"]["network_only_loopback"] is True
+          print("EXPECTED_NEGATIVE_CONTROL: removing --read-only was detected")
+          PY
+      - name: Three real negative controls — network, non-root UID and memory budget
+        shell: bash
+        run: |
+          python -m foundry.sandbox_negative \
+            --image "$OPDB_TEST_IMAGE" \
+            --fixture "$GITHUB_WORKSPACE/foundry/fixtures" \
+            --output sandbox-negative-evidence.json
+          python - <<'PY'
+          import json
+          with open("sandbox-negative-evidence.json", encoding="utf-8") as handle:
+              report=json.load(handle)
+          assert report["state"] == "EXPECTED_FAILURES_OBSERVED"
+          assert report["expected_failures_observed"] is True
+          assert set(report["negative_controls"]) == {"network", "non_root", "memory"}
+          for value in report["negative_controls"].values():
+              assert value["detected_unsafe"] is True
+              assert value["guest_exit_nonzero"] is True
+          assert report["untrusted_model_code_allowed"] is False
+          assert report["candidate_executed"] is False
+          assert report["github_write_allowed"] is False
+          assert report["automatic_merge_allowed"] is False
+          assert report["production_allowed"] is False
+          assert report["launch_authorized"] is False
+          print("EXPECTED_NEGATIVE_CONTROLS: network, UID, memory detected")
+          PY
+      - name: Exercise fixed denied-operation fixture and two controlled negative checks
+        shell: bash
+        run: |
+          python -m foundry.sandbox_adversarial \
+            --image "$OPDB_TEST_IMAGE" \
+            --fixture "$GITHUB_WORKSPACE/foundry/fixtures" \
+            --output adversarial-sandbox-evidence.json
+          python - <<'PY'
+          import json
+          with open("adversarial-sandbox-evidence.json", encoding="utf-8") as f:
+              r=json.load(f)
+          assert r["state"] == "FIXED_DENIALS_OBSERVED"
+          assert set(r["observations"]) == {
+              "root_write_denied", "source_write_denied",
+              "docker_socket_absent", "secret_names_absent",
+              "seccomp_filter_active", "baseline_confinement_pass",
+              "no_host_network_interface",
+          }
+          assert all(v is True for v in r["observations"].values())
+          assert r["negative_controls_verified"] is True
+          assert r["synthetic_canary_detected"] is True
+          assert r["synthetic_relaxed_seccomp_detected"] is True
+          assert r["model_patch_execution_authorized"] is False
+          assert r["arbitrary_code_isolation_attested"] is False
+          assert r["github_write_allowed"] is False
+          assert r["production_allowed"] is False
+          assert r["launch_authorized"] is False
+          print("EXPECTED_FIXED_DENIALS: fake-secret and disabled-seccomp detected")
+          PY
+      - name: Re-verify bounded Docker driver and cleanup controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_sandbox_runner
+          python -m foundry.sandbox_runner --probe confinement --output runner-confinement.json
+          python -m foundry.sandbox_runner --probe adversarial --output runner-adversarial.json
+          python - <<'PY'
+          import json
+          for probe in ("confinement", "adversarial"):
+              with open("runner-"+probe+".json", encoding="utf-8") as stream:
+                  report=json.load(stream)
+              assert report["state"]=="REVIEWED_PROBE_PASS", report
+              assert report["probe"]==probe
+              assert all(report["observed"].values())
+              assert not report["agent_sandbox_attested"]
+              assert not report["candidate_executed"]
+              assert not report["github_write_allowed"]
+              assert not report["production_allowed"]
+              assert not report["launch_authorized"]
+          PY
+      - name: S-008 isolated fixed handoff — tests and actual Docker observation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_isolated_worker_s008
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from foundry.worker_contract import _request_for
+          Path("s008-request.json").write_text(
+              json.dumps(_request_for(os.environ["GITHUB_SHA"])),
+              encoding="utf-8"
+          )
+          PY
+          python -m foundry.isolated_worker \
+            --request-file s008-request.json \
+            --expected-sha "$GITHUB_SHA" \
+            --checkout "$GITHUB_WORKSPACE" \
+            --output s008-isolation-evidence.json
+          python - <<'PY'
+          import json
+          r=json.load(open("s008-isolation-evidence.json",encoding="utf-8"))
+          assert r["state"] == "ISOLATED_REVIEW_ONLY", r
+          assert r["os_worker_restrictions_observed"] is True
+          assert r["review"]["state"] == "REVIEW_ONLY_PATCH"
+          assert r["review"]["human_review_required"] is True
+          assert r["trusted_controller_attested"] is False
+          assert r["arbitrary_model_code_executed"] is False
+          assert r["model_invoked"] is False
+          assert r["github_write_allowed"] is False
+          assert r["production_allowed"] is False
+          assert r["automatic_merge_allowed"] is False
+          assert r["launch_authorized"] is False
+          print("S008_FIXED_GUEST_OBSERVED; independent trusted controller NOT ATTESTED")
+          PY
+          git diff --exit-code
+      - name: S-008 negative control — removing shared-memory cap must fail
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, secrets
+          from foundry.sandbox_policy import _REVIEWED_FIXTURE, plan
+          from foundry.sandbox_runner import DOCKER, PINNED_IMAGE, _run
+          cfg=plan(PINNED_IMAGE,_REVIEWED_FIXTURE,12,probe="handoff")
+          assert cfg["state"]=="POLICY_PLAN_ONLY", cfg
+          argv=list(cfg["command_argv"])
+          argv.remove("--shm-size=8m")
+          name="opdb-s008-negative-"+secrets.token_hex(8)
+          at=argv.index(PINNED_IMAGE)
+          argv[0]=DOCKER
+          argv[at:at]=["--name="+name,
+                        "--env=OPDB_SOURCE_SHA="+os.environ["GITHUB_SHA"]]
+          try:
+              result=_run(argv,timeout=25)
+              report=json.loads(result.stdout.strip())
+              assert result.returncode != 0, report
+              assert report["probe"]=="fixed-data-only-handoff-s008"
+              assert report["passed"] is False
+              assert report["checked"]["shm_8m"] is False
+              assert report["checked"]["network_only_loopback"] is True
+              assert report["arbitrary_model_code_executed"] is False
+              assert report["launch_authorized"] is False
+              print("EXPECTED_S008_NEGATIVE: missing --shm-size=8m detected")
+          finally:
+              try:
+                  _run([DOCKER,"rm","-f",name],timeout=5)
+              finally:
+                  alive=_run([DOCKER,"ps","-a","--format","{{.Names}}",
+                              "--filter","name=^/"+name+"$"],timeout=5)
+                  assert alive.returncode==0 and not alive.stdout.strip(), (
+                      "Negative probe container cleanup not confirmed")
+          PY
+      - name: S-008B real negative control — guest must refuse missing session nonce
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, secrets
+          from foundry.sandbox_policy import _REVIEWED_FIXTURE, plan
+          from foundry.sandbox_runner import DOCKER, PINNED_IMAGE, _run
+          from foundry.worker_contract import _request_for
+          sha = os.environ["GITHUB_SHA"]
+          digest = hashlib.sha256(json.dumps(
+              _request_for(sha), sort_keys=True, separators=(",", ":")
+          ).encode("ascii")).hexdigest()
+          policy = plan(PINNED_IMAGE, _REVIEWED_FIXTURE, 12, probe="handoff")
+          assert policy["state"] == "POLICY_PLAN_ONLY", policy
+          argv = list(policy["command_argv"])
+          name = "opdb-s008b-missing-nonce-" + secrets.token_hex(8)
+          position = argv.index(PINNED_IMAGE)
+          argv[0] = DOCKER
+          argv[position:position] = [
+              "--name=" + name,
+              "--env=OPDB_SOURCE_SHA=" + sha,
+              "--env=OPDB_REQUEST_SHA256=" + digest,
+              # Deliberately omit OPDB_SESSION_NONCE.
+          ]
+          try:
+              result = _run(argv, timeout=25)
+              report = json.loads(result.stdout.strip())
+              assert result.returncode != 0, report
+              assert report["probe"] == "fixed-data-only-handoff-s008"
+              assert report["session_nonce"] == ""
+              assert report["request_sha256"] == digest
+              assert report["passed"] is False
+              assert report["reply"] is None
+              assert report["checked"]["network_only_loopback"] is True
+              assert report["arbitrary_model_code_executed"] is False
+              assert report["launch_authorized"] is False
+              print("EXPECTED_S008B_NEGATIVE: missing nonce denied in actual Docker guest")
+          finally:
+              try:
+                  _run([DOCKER, "rm", "-f", name], timeout=5)
+              finally:
+                  listing = _run(
+                      [DOCKER, "ps", "-a", "--format", "{{.Names}}",
+                       "--filter", "name=^/" + name + "$"], timeout=5)
+                  assert listing.returncode == 0 and not listing.stdout.strip(), (
+                      "Missing-nonce negative probe cleanup not confirmed")
+          PY
+      - name: Print bounded synthetic evidence to CI logs while artifact quota is exhausted
+        if: always()
+        shell: bash
+        run: |
+          for evidence in fixed-sandbox-evidence.json sandbox-negative-evidence.json adversarial-sandbox-evidence.json s008-isolation-evidence.json; do
+            if [ -s "$evidence" ]; then
+              echo "=== $evidence / source SHA $GITHUB_SHA ==="
+              cat "$evidence"
+            else
+              echo "MISSING_EVIDENCE: $evidence"
+            fi
+          done
+          # This reporting step never overrides the outcome of failed preceding checks.
+      - name: Confirm source checkout remains unmodified
+        run: git diff --exit-code
+      - name: Declare exact evidence boundary
+        run: echo "Observed fixed synthetic Docker probe only. Digest is now pinned and reproducible, but NOT independent supply-chain approved. No LLM, arbitrary patches, real agent sandbox attestation, production, merge or launch."

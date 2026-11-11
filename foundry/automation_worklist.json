@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "repository": "mel2003ru-code/OpDB",
+  "pr_number": 32,
+  "issue_number": 31,
+  "security_blocker": 21,
+  "items": [
+    {
+      "id": "FND-009A",
+      "status": "DONE",
+      "evidence_url": "https://github.com/mel2003ru-code/OpDB/commit/b2bf62645528b1fa880cb1238a08064f27b9d638"
+    },
+    {
+      "id": "FND-009B",
+      "status": "DONE",
+      "evidence_url": "https://github.com/mel2003ru-code/OpDB/commit/077af4c7b185dde4e0c83a7e74d5871f3a10d616"
+    },
+    {
+      "id": "FND-009C",
+      "status": "DONE",
+      "evidence_url": "https://github.com/mel2003ru-code/OpDB/commit/3376e53e360b323b7934d731aac75a37499b4ba9"
+    }
+  ]
+}
