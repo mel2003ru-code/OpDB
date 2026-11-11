@@ -64,7 +64,17 @@ class BatchModelTests(unittest.TestCase):
                         ops = random_batch(rng)
                         lens.apply(ops)
                         apply_model(model, ops)
-                        self.check(path, [lens], model)
+                        self.check(path, [lens, plain], model)
+                    # A write through the second store must be visible to the
+                    # Lens store, whose answers still equal the model.
+                    ops = random_batch(rng)
+                    plain.apply(ops)
+                    apply_model(model, ops)
+                    self.check(path, [lens, plain], model)
+                    ops = random_batch(rng)
+                    lens.apply(ops)
+                    apply_model(model, ops)
+                    self.check(path, [lens, plain], model)
                 with TruthStore(path, lens=True) as reopened:
                     self.check(path, [reopened], model)
 
