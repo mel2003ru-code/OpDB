@@ -222,8 +222,12 @@ class TruthStore:
                         ):
                             key, size = _metric(row)
                             lengths[key] = size
-                for item in checked:
-                    if tracking:
+
+                    # Keep SQL writes in contiguous operation runs. executemany
+                    # preserves order (including repeated keys) while avoiding
+                    # one Python-to-SQLite call per operation on the Lens path.
+                    write_runs = []
+                    for item in checked:
                         group = group_of(item[1])
                         delta = changes.setdefault(group, [0, 0])
                         old_length = lengths[item[1]]
@@ -236,16 +240,34 @@ class TruthStore:
                         # The next operation on this key observes this write.
                         lengths[item[1]] = (len(item[2]) if item[0] == "put"
                                             else None)
-                    if item[0] == "put":
-                        self._db.execute(
-                            "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
-                            "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
-                            (item[1], item[2]),
-                        )
-                    else:
-                        self._db.execute(
-                            "DELETE FROM opdb_source_kv WHERE k=?", (item[1],)
-                        )
+                        if not write_runs or write_runs[-1][0] != item[0]:
+                            write_runs.append([item[0], []])
+                        write_runs[-1][1].append(item)
+
+                    for kind, run in write_runs:
+                        if kind == "put":
+                            self._db.executemany(
+                                "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
+                                "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                                ((item[1], item[2]) for item in run),
+                            )
+                        else:
+                            self._db.executemany(
+                                "DELETE FROM opdb_source_kv WHERE k=?",
+                                ((item[1],) for item in run),
+                            )
+                else:
+                    for item in checked:
+                        if item[0] == "put":
+                            self._db.execute(
+                                "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
+                                "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                                (item[1], item[2]),
+                            )
+                        else:
+                            self._db.execute(
+                                "DELETE FROM opdb_source_kv WHERE k=?", (item[1],)
+                            )
                 self._db.execute(
                     "UPDATE opdb_meta SET commit_seq=commit_seq+1 WHERE singleton=1"
                 )
