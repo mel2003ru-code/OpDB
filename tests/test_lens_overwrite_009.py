@@ -13,10 +13,13 @@ def _group(key):
 
 
 def _raw_source(path):
-    with sqlite3.connect(path) as db:
+    db = sqlite3.connect(path)
+    try:
         rows = db.execute(
             'SELECT k, v, typeof(v) FROM opdb_source_kv ORDER BY k'
         ).fetchall()
+    finally:
+        db.close()
     if any(storage != 'blob' or type(value) is not bytes
            for _, value, storage in rows):
         raise AssertionError('Source contains a non-BLOB value')
@@ -85,6 +88,28 @@ class OverwriteLensOracleTests(unittest.TestCase):
                                 model[action[1]] = action[2]
                         store.apply(actions)
                         self.assert_state(path, store, model)
+
+
+    def test_repeated_key_operations_preserve_order(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'source.db'
+            model = {'g/repeated': b'start', 'g/other': b'other'}
+            with TruthStore(path, lens=True) as store:
+                store.apply([('put', key, value) for key, value in model.items()])
+                operations = [
+                    ('put', 'g/repeated', b'first'),
+                    ('delete', 'g/repeated'),
+                    ('put', 'g/repeated', b'final'),
+                    ('delete', 'g/other'),
+                    ('put', 'g/other', b'restored'),
+                ]
+                for action in operations:
+                    if action[0] == 'delete':
+                        model.pop(action[1], None)
+                    else:
+                        model[action[1]] = action[2]
+                store.apply(operations)
+                self.assert_state(path, store, model)
 
 
 if __name__ == '__main__':
