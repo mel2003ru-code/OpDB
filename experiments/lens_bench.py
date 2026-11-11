@@ -145,6 +145,7 @@ def run(size, root, reads, puts, batches):
         rates['lens' if enabled else 'source'] = write_rates(work, enabled, puts, batches)
     overhead = {key: round(100 * (rates['source'][key] / rates['lens'][key] - 1), 1)
                 for key in ('put_rows_s', 'apply_1000_rows_s')}
+    # Comparing per-batch durations is less sensitive to Python list setup.
     overhead['apply_1000_median_ms'] = round(100 * (
         rates['lens']['apply_1000_median_ms'] /
         rates['source']['apply_1000_median_ms'] - 1), 1)
@@ -176,5 +177,5 @@ def main():
             print(json.dumps(run(size, Path(temp), opts.reads, opts.puts, opts.batches)), flush=True)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
