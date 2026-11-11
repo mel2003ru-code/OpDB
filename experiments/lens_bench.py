@@ -1,4 +1,4 @@
-"""TASK-006/007 local-file Lens vs Source microbench; no cross-engine claims.
+"""TASK-006/007/009 local-file Lens vs Source microbench; no cross-engine claims.
 
 Run: python experiments/lens_bench.py [--sizes 10000 100000 1000000]
 """
@@ -57,6 +57,68 @@ def write_rates(path, enabled, puts, batches):
             "apply_1000_median_ms": round(statistics.median(batch_times) / 1e6, 3)}
 
 
+def _existing_key(index):
+    # run() seeds one existing key for every source row across ten groups.
+    return f'g{index % 10}/{index:09d}'
+
+
+def _scenario_batch(kind, batch):
+    overwrite_value = b'Y' * (61 + (batch % 7) * 7)
+    if kind == 'overwrite':
+        return ([('put', _existing_key(i), overwrite_value)
+                 for i in range(1000)], [])
+    if kind == 'delete':
+        keys = [_existing_key(i) for i in range(1000)]
+        return ([('delete', key) for key in keys],
+                [('put', key, b'X' * 100) for key in keys])
+    if kind == 'mixed':
+        new_ops = [('put', f'new/{batch:03d}/{i:04d}', b'N' * 73)
+                   for i in range(333)]
+        overwrite_ops = [('put', _existing_key(i), overwrite_value)
+                         for i in range(333)]
+        delete_keys = [_existing_key(333 + i) for i in range(334)]
+        delete_ops = [('delete', key) for key in delete_keys]
+        restore = [('put', key, b'X' * 100) for key in delete_keys]
+        return new_ops + overwrite_ops + delete_ops, restore
+    raise ValueError(f'unknown scenario: {kind}')
+
+
+def _measure_scenario(base, root, size, kind, enabled, batches):
+    mode = 'lens' if enabled else 'source'
+    work = root / f'scenario-{size}-{kind}-{mode}.db'
+    shutil.copyfile(base, work)
+    samples = []
+    with TruthStore(work, lens=enabled) as store:
+        for batch in range(batches):
+            operations, restore = _scenario_batch(kind, batch)
+            started = time.perf_counter_ns()
+            store.apply(operations)
+            samples.append(time.perf_counter_ns() - started)
+            # Keep every delete batch at the same starting cardinality; this
+            # restoration is deliberately outside the timed interval.
+            if restore:
+                store.apply(restore)
+    work.unlink(missing_ok=True)
+    return round(statistics.median(samples) / 1e6, 3)
+
+
+def run_write_scenarios(base, root, size, batches):
+    if size < 1000:
+        raise ValueError('scenario benchmark requires at least 1000 existing rows')
+    scenarios = {}
+    for kind in ('overwrite', 'delete', 'mixed'):
+        source_ms = _measure_scenario(base, root, size, kind, False, batches)
+        lens_ms = _measure_scenario(base, root, size, kind, True, batches)
+        overhead = round(100 * (lens_ms / source_ms - 1), 1) if source_ms else None
+        scenarios[kind] = {
+            'batches': batches,
+            'source_median_batch_ms': source_ms,
+            'lens_median_batch_ms': lens_ms,
+            'lens_overhead_percent': overhead,
+        }
+    return scenarios
+
+
 def run(size, root, reads, puts, batches):
     base = root / f'base-{size}.db'
     with sqlite3.connect(base) as conn:
@@ -83,7 +145,6 @@ def run(size, root, reads, puts, batches):
         rates['lens' if enabled else 'source'] = write_rates(work, enabled, puts, batches)
     overhead = {key: round(100 * (rates['source'][key] / rates['lens'][key] - 1), 1)
                 for key in ('put_rows_s', 'apply_1000_rows_s')}
-    # Comparing per-batch durations is less sensitive to Python list setup.
     overhead['apply_1000_median_ms'] = round(100 * (
         rates['lens']['apply_1000_median_ms'] /
         rates['source']['apply_1000_median_ms'] - 1), 1)
@@ -94,6 +155,7 @@ def run(size, root, reads, puts, batches):
               "write_rates": rates, "write_overhead_percent": overhead}
     result['lens_read_faster'] = lens_result['median_us'] < source_result['median_us']
     result['write_overhead_over_20pct'] = any(v > 20 for v in overhead.values())
+    result['batch_scenarios'] = run_write_scenarios(base, root, size, batches)
     return result
 
 
@@ -114,5 +176,5 @@ def main():
             print(json.dumps(run(size, Path(temp), opts.reads, opts.puts, opts.batches)), flush=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
