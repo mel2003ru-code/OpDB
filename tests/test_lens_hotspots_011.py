@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from opdb import TruthStore
-from experiments.lens_batch_hotspots import SCENARIOS, make_batch, VALUE, existing_key
+from experiments.lens_bench import (HOTSPOT_SCENARIOS as SCENARIOS,
+                                    hotspot_batch as make_batch, VALUE, existing_key)
 
 GROUPS = ['a', 'b', 'ключ', '日本', 'é', '']
 
@@ -88,6 +89,33 @@ class HotspotBatchTests(unittest.TestCase):
                         store.apply(ops)
                         apply_model(model, ops)
                         self.check(path, [store], model, GROUPS)
+
+    def test_second_store_closed_and_reopened_each_batch(self):
+        for seed in (3, 42):
+            rng = random.Random(seed)
+            with tempfile.TemporaryDirectory() as temp:
+                path = Path(temp) / 'kv.db'
+                model = {}
+                with TruthStore(path, lens=True) as first:
+                    for batch in range(6):
+                        ops = [('put', f'{rng.choice(GROUPS)}/{rng.randrange(30)}',
+                                b'z' * rng.choice([0, 3, 40])) if rng.random() < 0.7
+                               else ('delete', f'{rng.choice(GROUPS)}/{rng.randrange(30)}')
+                               for _ in range(rng.randrange(1, 200))]
+                        # A fresh second store on the same file: it reads, or
+                        # (odd batches) writes the batch, and is closed again.
+                        second = TruthStore(path, lens=(batch % 4 < 2))
+                        try:
+                            self.check(path, [second], model, GROUPS)
+                            (second if batch % 2 else first).apply(ops)
+                            apply_model(model, ops)
+                            self.check(path, [second, first], model, GROUPS)
+                        finally:
+                            second.close()
+                        # After the second store is closed the first still agrees.
+                        self.check(path, [first], model, GROUPS)
+                with TruthStore(path, lens=True) as reopened:
+                    self.check(path, [reopened], model, GROUPS)
 
     def test_failed_batch_rolls_back(self):
         with tempfile.TemporaryDirectory() as temp:
