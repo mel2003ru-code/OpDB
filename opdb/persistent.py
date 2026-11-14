@@ -14,6 +14,7 @@ from .core import (GroupStats, SourceIntegrityError, TruthStore, _key,
 from .lens import _metric, group_of, source_stats
 
 SCHEMA_VERSION = 1
+_CHUNK = 300     # rows per multi-row statement (<= 900 bound parameters)
 
 
 class PersistentTruthStore(TruthStore):
@@ -180,6 +181,7 @@ class PersistentTruthStore(TruthStore):
                                 f"WHERE k IN ({','.join('?' * len(chunk))})", chunk):
                             key, size = _metric(row)
                             lengths[key] = size
+                runs: list[list] = []     # contiguous same-kind runs, in order
                 for item in checked:
                     if trusted:
                         d = deltas.setdefault(group_of(item[1]), [0, 0])
@@ -192,23 +194,40 @@ class PersistentTruthStore(TruthStore):
                             d[0] += 1
                             d[1] += new
                         lengths[item[1]] = new
-                    if item[0] == "put":
-                        self._db.execute(
-                            "INSERT INTO opdb_source_kv(k,v) VALUES (?,?) "
-                            "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
-                            (item[1], item[2]))
-                    else:
-                        self._db.execute(
-                            "DELETE FROM opdb_source_kv WHERE k=?", (item[1],))
+                    if not runs or runs[-1][0] != item[0]:
+                        runs.append([item[0], []])
+                    runs[-1][1].append(item)
+                # One multi-row statement per <=300 rows of a same-kind run
+                # (bound-parameter limit 999). Rows apply in order, so repeated
+                # keys behave as in a one-by-one loop; far fewer statements are
+                # prepared than with one execute() per operation.
+                for kind, run in runs:
+                    for i in range(0, len(run), _CHUNK):
+                        part = run[i:i + _CHUNK]
+                        if kind == "put":
+                            self._db.execute(
+                                "INSERT INTO opdb_source_kv(k,v) VALUES "
+                                + ",".join(["(?,?)"] * len(part))
+                                + " ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                                [x for it in part for x in (it[1], it[2])])
+                        else:
+                            self._db.execute(
+                                "DELETE FROM opdb_source_kv WHERE k IN ("
+                                + ",".join("?" * len(part)) + ")",
+                                [it[1] for it in part])
                 self._db.execute(
                     "UPDATE opdb_meta SET commit_seq=commit_seq+1 WHERE singleton=1")
                 if trusted:
-                    for g, (dn, db_) in deltas.items():
-                        if dn or db_:
-                            self._db.execute(
-                                "INSERT INTO opdb_lens_group(g,n,b) VALUES (?,?,?) "
-                                "ON CONFLICT(g) DO UPDATE SET n=n+?, b=b+?",
-                                (g, dn, db_, dn, db_))
+                    changed = [(g, dn, db_) for g, (dn, db_) in deltas.items()
+                               if dn or db_]
+                    for i in range(0, len(changed), _CHUNK):
+                        part = changed[i:i + _CHUNK]
+                        self._db.execute(
+                            "INSERT INTO opdb_lens_group(g,n,b) VALUES "
+                            + ",".join(["(?,?,?)"] * len(part))
+                            + " ON CONFLICT(g) DO UPDATE SET "
+                            "n=n+excluded.n, b=b+excluded.b",
+                            [x for row in part for x in row])
                     if self._db.execute(
                             "SELECT 1 FROM opdb_lens_group WHERE n<0 OR b<0 "
                             "LIMIT 1").fetchone():
