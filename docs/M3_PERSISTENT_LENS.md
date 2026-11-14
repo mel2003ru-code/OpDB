@@ -36,8 +36,7 @@ maintained on every write, or periodic scans) is the owner's call.
 
 Machine: Intel Xeon @ 2.10 GHz, 2 vCPU, Python 3.13.18, SQLite 3.53.1. Before = main
 8b820b2; after = the TASK-013 branch. Script: `experiments/m3_write_profile.py`
-(30 batches of 1,000 operations per shape; two runs at 10k and 100k rows, one run
-at 1M). Median / p95 in ms, persisted store only; the in-memory Lens and
+(30 batches of 1,000 operations per shape; two runs at every size, 1M included). Median / p95 in ms, persisted store only; the in-memory Lens and
 Source-only stores were run in the same script for reference.
 
 Where the time went (new-key batch, phases re-run on a private connection and
@@ -59,17 +58,24 @@ same-kind run of operations is now written with multi-row statements of at most
 | 100k | overwrite | 19.69/28.71, 20.8/29.56 | 16.07/23.82, 15.52/23.26 |
 | 100k | delete | 29.61/39.55, 27.92/34.52 | 19.87/24.46, 23.59/29.42 |
 | 100k | mixed | 25.63/34.82, 27.66/37.01 | 23.37/28.83, 24.99/29.7 |
-| 1M | new | 9.03/15.45 | 6.62/12.59 |
-| 1M | overwrite | 58.37/68.2 | 46.75/61.22 |
-| 1M | delete | 65.64/75.12 | 54.45/65.6 |
-| 1M | mixed | 42.32/52.36 | 41.07/53.7 |
+| 1M | new | 9.03/15.45, 9.31/18.47 | 6.62/12.59, 6.46/12.89 |
+| 1M | overwrite | 58.37/68.2, 54.18/67.25 | 46.75/61.22, 49.03/68.72 |
+| 1M | delete | 65.64/75.12, 70.15/87.37 | 54.45/65.6, 56.8/65.71 |
+| 1M | mixed | 42.32/52.36, 44.31/79.33 | 41.07/53.7, 45.88/51.94 |
 
 Reference after the change, same runs (in-memory Lens / Source-only, median ms):
-10k new 4.65-4.92 / 7.4-9.9; 100k new 5.12-6.95 / 6.7-7.2; 1M overwrite 43.42 / 39.67.
+10k new 4.65-4.92 / 7.4-9.9; 100k new 5.12-6.95 / 6.7-7.2; 1M overwrite 43.4-46.8 / 39.7-42.0.
 Run-to-run noise on this shared 2-vCPU machine is large (the Source-only rows
-differ by up to 2x between runs), so differences of a few ms, such as 1M mixed,
-are not evidence of a change. The persisted store is still not faster than
+differ by up to 2x between runs), so differences of a few ms, such as 1M mixed (the second run is
+slightly slower after than before), are not evidence of a change; at 1M the
+consistent gains are new keys (about -30%) and delete (about -15-20%), overwrite
+is lower in both runs by 5-9 ms. The persisted store is still not faster than
 Source-only in every shape. Stored format unchanged (schema version 1).
 Note: the benchmark fixture writes rows with raw SQL while the store is closed;
 the profile script calls `rebuild()` first. That raw-write-while-closed boundary
 is the open owner decision from TASK-012 and is not changed here.
+
+Extra check outside the committed tests (60 seeds 100-159, two stores on one
+file applying alternating batches of 3/300/301/900 operations, compared with
+Source recomputation after every batch): 0 mismatches. Second 1M series was run
+on SHA 5f7309d (after) and main 8b820b2 (before).
