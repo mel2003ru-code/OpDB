@@ -100,6 +100,31 @@ def _source_row(row: tuple) -> tuple[str, bytes]:
     return key, value
 
 
+def _validate_ops(operations: Iterable[tuple]) -> list[tuple]:
+    """Validate a whole batch before any transaction (shared by all stores)."""
+    actions = list(islice(iter(operations), MAX_BATCH + 1))
+    if len(actions) > MAX_BATCH:
+        raise ValueError("batch exceeds 10000 operations")
+    checked = []
+    total_bytes = 0
+    for item in actions:
+        if not isinstance(item, tuple) or not item:
+            raise ValueError("invalid operation")
+        if len(item) == 3 and item[0] == "put":
+            key, value = _key(item[1]), _value(item[2])
+            total_bytes += len(key.encode("utf-8")) + len(value)
+            checked.append(("put", key, value))
+        elif len(item) == 2 and item[0] == "delete":
+            key = _key(item[1])
+            total_bytes += len(key.encode("utf-8"))
+            checked.append(("delete", key))
+        else:
+            raise ValueError("invalid operation")
+        if total_bytes > MAX_BATCH_BYTES:
+            raise ValueError("batch exceeds 8 MiB of key and value payload")
+    return checked
+
+
 class TruthStore:
     """Single-process research API. SQLite remains authoritative.
 
@@ -178,26 +203,7 @@ class TruthStore:
         Accepted operations: ("put", key, bytes), ("delete", key).
         Validate all arguments before a transaction to avoid partial effects.
         """
-        actions = list(islice(iter(operations), MAX_BATCH + 1))
-        if len(actions) > MAX_BATCH:
-            raise ValueError("batch exceeds 10000 operations")
-        checked = []
-        total_bytes = 0
-        for item in actions:
-            if not isinstance(item, tuple) or not item:
-                raise ValueError("invalid operation")
-            if len(item) == 3 and item[0] == "put":
-                key, value = _key(item[1]), _value(item[2])
-                total_bytes += len(key.encode("utf-8")) + len(value)
-                checked.append(("put", key, value))
-            elif len(item) == 2 and item[0] == "delete":
-                key = _key(item[1])
-                total_bytes += len(key.encode("utf-8"))
-                checked.append(("delete", key))
-            else:
-                raise ValueError("invalid operation")
-            if total_bytes > MAX_BATCH_BYTES:
-                raise ValueError("batch exceeds 8 MiB of key and value payload")
+        checked = _validate_ops(operations)
         with self._lock:
             self._ensure_open()
             tracking = self._lens is not None and self._lens.valid()
