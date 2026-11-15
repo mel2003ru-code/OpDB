@@ -22,6 +22,12 @@ by an arbitrary Python function without scanning every row.
 the Source row (value and group) before they are returned; a mismatch makes the
 Lens untrusted and the answer comes from Source.
 
+Numeric reads pin one SQLite read snapshot for version checking, count/sum,
+extremes and Source fallback. A concurrent writer cannot mix generations in
+one answer. Open/rebuild capture the trusted data version before validation
+or rebuilding, so a foreign commit after completion is noticed on the next
+read rather than silently adopted as a trusted baseline.
+
 **Open** is bounded (no Source or index scan): metadata exists, schema version
 and grouping name match, `lens_seq == commit_seq`, group rows are well-typed and
 add up to `tot_n`. A different grouping name, stale generation or damage means

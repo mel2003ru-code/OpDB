@@ -91,10 +91,11 @@ class NumericTruthStore(TruthStore):
                 "PRIMARY KEY CHECK(singleton=1), schema_version INTEGER NOT NULL, "
                 "lens_seq INTEGER NOT NULL, grouping TEXT NOT NULL, "
                 "tot_n INTEGER NOT NULL)")
+            version = self._data_version()
             reason = self._validate()
             if reason is None:
                 self._trusted, self.open_mode = True, "PERSISTED"
-                self._dv = self._data_version()
+                self._dv = version
             else:
                 self.open_reason = reason
                 self._rebuild_or_fallback()
@@ -152,6 +153,7 @@ class NumericTruthStore(TruthStore):
         self._trusted = False
         with self._lock:
             self._ensure_open()
+            version = self._data_version()
             self._db.execute("BEGIN IMMEDIATE")
             try:
                 groups: dict[str, list[int]] = {}
@@ -177,7 +179,8 @@ class NumericTruthStore(TruthStore):
                 self._db.execute("ROLLBACK")
                 raise
             self._trusted = True
-            self._dv = self._data_version()
+            # A foreign commit after ours must not become the trusted baseline.
+            self._dv = version
 
     def _refresh(self) -> None:
         """Any commit by another connection is unverified: rebuild from Source.
@@ -222,21 +225,29 @@ class NumericTruthStore(TruthStore):
         with self._lock:
             self._ensure_open()
             self._refresh()
-            if self._trusted:
-                try:
-                    row = self._db.execute(
-                        "SELECT n,s FROM opdb_nlens_group WHERE g=?", (group,)
-                    ).fetchone()
-                    if row is None:
-                        return NumericStats(0, 0, None, None, "LENS")
-                    lo, hi = self._extreme(group, "ASC"), self._extreme(group, "DESC")
-                    if lo is None or hi is None:
-                        raise SourceIntegrityError("group without value index")
-                    return NumericStats(row[0], row[1], lo, hi, "LENS")
-                except (SourceIntegrityError, sqlite3.DatabaseError):
+            self._db.execute("BEGIN")
+            try:
+                self._seq()  # Pin the read snapshot before checking its version.
+                if self._trusted and self._data_version() != self._dv:
                     self._trusted = False
                     self._failed = None
-            return self.numeric_stats_source(group)
+                if self._trusted:
+                    try:
+                        row = self._db.execute(
+                            "SELECT n,s FROM opdb_nlens_group WHERE g=?", (group,)
+                        ).fetchone()
+                        if row is None:
+                            return NumericStats(0, 0, None, None, "LENS")
+                        lo, hi = self._extreme(group, "ASC"), self._extreme(group, "DESC")
+                        if lo is None or hi is None:
+                            raise SourceIntegrityError("group without value index")
+                        return NumericStats(row[0], row[1], lo, hi, "LENS")
+                    except (SourceIntegrityError, sqlite3.DatabaseError):
+                        self._trusted = False
+                        self._failed = None
+                return self.numeric_stats_source(group)
+            finally:
+                self._db.execute("ROLLBACK")
 
     # -- writes ---------------------------------------------------------
     def apply(self, operations) -> None:
