@@ -13,3 +13,4 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-012 M3 atomic persistent Lens prototype](TASK-012-m3-persistent-lens.md) | M3 | DONE | #60 |
 | [TASK-013 Reduce persisted Lens write cost](TASK-013-persistent-write-cost.md) | M3 | DONE | #62 |
 | [TASK-014 Numeric Lens: sum, min, max](TASK-014-lens-sum-min-max.md) | M4 | IN_PROGRESS | |
+| [TASK-015 M5 comparison with plain SQLite](TASK-015-m5-sqlite-comparison.md) | M5 | READY | |
