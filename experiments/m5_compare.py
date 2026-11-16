@@ -7,8 +7,9 @@ D  NumericTruthStore.numeric_stats_source   (Source recomputation, same file as 
 
 All contenders: journal_mode=WAL, synchronous=FULL (what OpDB sets itself).
 Every contender is compared with an independent dict model before and after
-each workload; any mismatch aborts the run. D is a full scan per call, so on
-1M rows it is checked on a seeded sample of groups instead of all of them.
+each workload; any mismatch aborts the run. D is a full scan per call: it is
+checked on ALL groups before timing (untimed; slow at 1M) and on a seeded sample of 20 groups
+after each workload.
 Usage: python experiments/m5_compare.py --sizes 10000 100000 1000000 --seed 15 --runs 15 --json out.json
 """
 import argparse
@@ -182,7 +183,7 @@ def run_size(n, seed, runs, tmp):
     for c in (A, B, C):
         c.build(model)
     D.path, D.source, D.store = paths["C"], True, C.store
-    full_d = all_groups if n <= 10000 else sample
+    full_d = all_groups     # TASK-015: D must match the model on ALL groups before any timing
     cont = {"A": A, "B": B, "C": C, "D": D}
     for name, c in cont.items():
         check(c, model, full_d if name == "D" else all_groups, f"{name} initial")
