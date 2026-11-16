@@ -272,7 +272,7 @@ def main():
             print(json.dumps({k: v for k, v in res["sizes"][-1].items() if k != "raw"}), flush=True)
     if a.json:
         with open(a.json, "w") as f:
-            json.dump(res, f, indent=1)
+            json.dump(res, f, separators=(",", ":"))
 
 
 if __name__ == "__main__":
