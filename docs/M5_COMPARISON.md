@@ -68,3 +68,40 @@ The 1M insert/overwrite/delete numbers include WAL fsync noise from a shared clo
 (via Python `sqlite3`) and OpDB were measured; nothing here is a claim about any other database.
 The bulk fixture load for C bypasses `apply()` and calls `rebuild()` explicitly, because raw writes
 to a closed store are not detected by the stored sequence number (known boundary, issue #53).
+
+## TASK-016: where `NumericTruthStore.apply` spends its time (negative result)
+
+No change was made to `opdb/numeric.py`, so there is no before/after table: the
+profile below showed nothing removable that is worth the risk. Script:
+`python experiments/m16_numeric_profile.py --rows N --batches 30 --seed 16`
+(a proxy over the store's SQLite connection times each statement kind; "python"
+is the rest of `apply`). Machine: 2 vCPU Intel Xeon @ 2.10 GHz, 8 GB RAM,
+Python 3.13.18, SQLite 3.53.1, WAL + synchronous=FULL, one run, 30 batches of
+1,000 operations, mean ms per batch (share of the batch):
+
+| rows | workload | batch total (median) | COMMIT | Lens val insert/delete | Source upsert | python |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10k | insert | 17.3 | 7.1 (39%) | 2.4 (13%) | 2.1 (11%) | 3.6 (19%) |
+| 10k | overwrite | 13.2 | 2.5 (17%) | 3.3 (23%) | 1.7 (12%) | 5.0 (34%) |
+| 10k | delete | 5.5 | 1.8 (28%) | 0.6 (9%) | - | 2.0 (31%) |
+| 100k | insert | 44.3 | 26.1 (59%) | 6.7 (15%) | 5.2 (12%) | 3.1 (7%) |
+| 100k | overwrite | 49.0 | 22.8 (47%) | 9.5 (19%) | 5.9 (12%) | 8.1 (17%) |
+| 100k | delete | 38.6 | 21.6 (55%) | 4.2 (11%) | - | 6.2 (16%) |
+| 1M | insert | 77.0 | 51.1 (66%) | 8.8 (11%) | 10.2 (13%) | 3.3 (4%) |
+| 1M | overwrite | 100.1 | 60.4 (60%) | 16.7 (17%) | 10.2 (10%) | 11.0 (11%) |
+| 1M | delete | 81.6 | 56.1 (67%) | 7.2 (9%) | - | 8.8 (11%) |
+
+Reading: at 100k and 1M rows the commit (page writes and fsync of the extra
+`opdb_nlens_val` and `opdb_nlens_group` trees) is 47-67% of a batch, and cannot
+shrink without weakening durability or atomicity. Group lookups, group upserts,
+the old-value lookup, the `commit_seq` and Lens meta updates are each at most
+5%. The only candidate is the Python part (4-34%, mostly at 10k overwrite),
+which would save at best a few ms on a batch; the `WITHOUT ROWID` question was
+not touched because it is already used for `opdb_nlens_val`. Statements already
+run once per chunk, not once per key. Conclusion: the gap to plain SQLite in
+the M5 table is the cost of maintaining a second ordered index, not avoidable
+overhead in `apply`. The A and B contenders were not rerun here.
+
+New tests: `tests/test_numeric_write_016.py` (20 seeds against a dict model and
+a fresh SQL connection, close/reopen, rollback, overflow, second store and an
+outside write).
