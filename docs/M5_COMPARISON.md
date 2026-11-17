@@ -105,3 +105,42 @@ overhead in `apply`. The A and B contenders were not rerun here.
 New tests: `tests/test_numeric_write_016.py` (20 seeds against a dict model and
 a fresh SQL connection, close/reopen, rollback, overflow, second store and an
 outside write).
+
+### TASK-016: repeat of the M5 write workloads (A, B, C), two runs
+
+`opdb/numeric.py` is unchanged, so both runs are the same code (git SHA
+`a7d048e6`); they are two independent runs (seeds 15 and 16), not before/after.
+Command: `python experiments/m5_compare.py --sizes 10000 100000 1000000 --seed S
+--runs 30 --json experiments/results/m16_runN.json`, summarised with
+`python experiments/m16_summarize.py run1.json run2.json`. 30 batches of 1,000
+operations per cell; milliseconds, median / p95. Same machine as above (2 vCPU
+Xeon 2.1 GHz, 8 GB, Python 3.13.18, SQLite 3.53.1, WAL + synchronous=FULL).
+Raw numbers: `experiments/results/m16_run1.json`, `m16_run2.json`.
+A = covering index, B = trigger summary table, C = numeric Lens.
+
+| run | rows | workload | A med/p95 | B med/p95 | C med/p95 | batches |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 10000 | insert | 3.8 / 6.6 | 5.1 / 8.2 | 9.6 / 15.5 | 30 |
+| 1 | 10000 | overwrite | 4.5 / 6.8 | 7.1 / 9.1 | 13.0 / 19.7 | 30 |
+| 1 | 10000 | delete | 5.0 / 9.1 | 8.2 / 11.1 | 11.7 / 19.1 | 30 |
+| 1 | 100000 | insert | 26.8 / 32.0 | 28.5 / 31.5 | 40.1 / 47.1 | 30 |
+| 1 | 100000 | overwrite | 27.8 / 31.7 | 31.9 / 36.8 | 46.4 / 52.5 | 30 |
+| 1 | 100000 | delete | 32.9 / 39.5 | 37.4 / 44.0 | 42.6 / 49.5 | 30 |
+| 1 | 1000000 | insert | 54.5 / 62.2 | 56.4 / 63.6 | 67.8 / 95.7 | 30 |
+| 1 | 1000000 | overwrite | 69.4 / 79.8 | 74.2 / 84.9 | 86.3 / 99.2 | 30 |
+| 1 | 1000000 | delete | 67.4 / 75.6 | 73.8 / 80.7 | 77.5 / 87.6 | 30 |
+| 2 | 10000 | insert | 3.4 / 5.3 | 5.2 / 6.3 | 9.3 / 11.9 | 30 |
+| 2 | 10000 | overwrite | 4.6 / 6.8 | 7.4 / 10.5 | 13.3 / 20.1 | 30 |
+| 2 | 10000 | delete | 5.5 / 8.6 | 8.7 / 12.3 | 12.0 / 18.3 | 30 |
+| 2 | 100000 | insert | 27.0 / 31.5 | 28.9 / 35.1 | 38.2 / 48.5 | 30 |
+| 2 | 100000 | overwrite | 29.7 / 34.0 | 31.9 / 37.3 | 45.9 / 53.3 | 30 |
+| 2 | 100000 | delete | 35.3 / 41.1 | 40.8 / 45.9 | 44.0 / 50.2 | 30 |
+| 2 | 1000000 | insert | 49.9 / 54.7 | 51.0 / 55.3 | 60.4 / 79.1 | 30 |
+| 2 | 1000000 | overwrite | 64.0 / 70.8 | 68.0 / 76.3 | 82.4 / 94.1 | 30 |
+| 2 | 1000000 | delete | 66.6 / 72.9 | 71.6 / 82.4 | 75.8 / 89.7 | 30 |
+
+C over A, median, both runs: 2.5x/2.8x (10k insert), 1.5x-1.7x at 100k,
+1.2x-1.3x at 1M; the two runs differ by up to about 10% for the same cell.
+File size at 1M: C is 6-7% larger than A. Open + first read: C 0.6-1.2 ms,
+A 0.1-0.4 ms. The earlier TASK-015 numbers are unchanged. Result is the same
+as in the profile above: no removable overhead was found.
