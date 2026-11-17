@@ -139,8 +139,8 @@ A = covering index, B = trigger summary table, C = numeric Lens.
 | 2 | 1000000 | overwrite | 64.0 / 70.8 | 68.0 / 76.3 | 82.4 / 94.1 | 30 |
 | 2 | 1000000 | delete | 66.6 / 72.9 | 71.6 / 82.4 | 75.8 / 89.7 | 30 |
 
-C over A, median, both runs: 2.5x/2.8x (10k insert), 1.5x-1.7x at 100k,
-1.2x-1.3x at 1M; the two runs differ by up to about 10% for the same cell.
+C over A, median, both runs: 2.2x-2.9x at 10k, 1.3x-1.7x at 100k,
+1.1x-1.3x at 1M; the two runs differ by up to about 10% for the same cell.
 File size at 1M: C is 6-7% larger than A. Open + first read: C 0.6-1.2 ms,
 A 0.1-0.4 ms. The earlier TASK-015 numbers are unchanged. Result is the same
 as in the profile above: no removable overhead was found.
