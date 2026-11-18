@@ -25,17 +25,19 @@ from a stale, damaged or overflowed Lens. Measure where the time goes and make
    once (chunked insert, still one `BEGIN IMMEDIATE`); validate keys in bulk;
    `DELETE` of whole tables versus dropping and recreating them (only if the
    stored schema and version stay identical). The stored format, schema
-   version, open validation and overflow fallback must not change.
+   version, open validation, `open_mode`/`open_reason` values and overflow fallback must not change.
 3. Keep a change only if repeated before/after runs on the same machine show
-   a gain; otherwise submit the measurements as a negative result.
+   a gain larger than the run-to-run spread; otherwise submit the measurements
+   as a negative result. No other threshold is set: report the numbers.
 
 ## Tests that must exist (new files only)
 - At least 20 seeds: build a store with put/overwrite/delete, call `rebuild()`
   and compare every group (`count`, `sum`, `min`, `max`) with a plain Python
   dict model and with a fresh SQL recomputation over Source. The table
   contents after the new `rebuild()` must equal the contents after the old
-  one (compare against a copy of the previous implementation kept inside the
-  test file, or against a Source-derived expected table).
+  one; the oracle is an expected table derived from Source by plain SQL/Python,
+  not a copy of the old implementation.
+- Calling `rebuild()` twice in a row without writes gives identical tables.
 - Negative numbers, ties, empty values rejected as before, Unicode keys,
   a single group holding every row, many groups with one row each.
 - Failure inside rebuild (wrong-width Source value written from outside, and an
@@ -48,7 +50,8 @@ from a stale, damaged or overflowed Lens. Measure where the time goes and make
 ## Measurement
 Time of `rebuild()` and of first open of an untrusted file at 10k, 100k and
 1M rows, median and worst of at least 7 runs, two independent runs, before and
-after, on one machine. Report CPU, RAM, Python, SQLite, git SHA and raw numbers.
+after, on one machine. Commit the "before" numbers (taken on the unchanged
+code) in the PR. Report CPU, RAM, OS, disk type, Python, SQLite, git SHA and raw numbers.
 Append the table as a new section to `docs/M4_NUMERIC_LENS.md` (do not edit
 earlier numbers). Do not claim a target; report what was measured.
 
