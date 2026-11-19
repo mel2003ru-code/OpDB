@@ -9,6 +9,7 @@ docs/M4_NUMERIC_LENS.md for the cost of min/max and the threat boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from operator import itemgetter
 import sqlite3
 import time
 from typing import Callable, Literal
@@ -19,6 +20,8 @@ from .lens import group_of
 SCHEMA_VERSION = 1
 INT64_MIN, INT64_MAX = -(1 << 63), (1 << 63) - 1
 _CHUNK = 300     # rows per multi-row statement (<= 900 bound parameters)
+_REBUILD_CHUNK = 65536   # rows per executemany during rebuild (one transaction)
+_first = itemgetter(0)
 
 
 class LensOverflow(Exception):
@@ -156,24 +159,39 @@ class NumericTruthStore(TruthStore):
             version = self._data_version()
             self._db.execute("BEGIN IMMEDIATE")
             try:
-                groups: dict[str, list[int]] = {}
-                vals = []
+                # TASK-017: rows are collected per group and inserted in
+                # (g, x) order, so the opdb_nlens_val B-tree fills almost
+                # sequentially instead of at random (measured: the unsorted
+                # insert was ~70% of a 1M-row rebuild). Same rows, same tables.
+                by: dict[str, list[tuple[int, str]]] = {}
                 for g, k, x in _scan(self._db, self._fn):
-                    p = groups.setdefault(g, [0, 0])
-                    p[0] += 1
-                    p[1] += x
-                    vals.append((g, x, k))
-                if any(not INT64_MIN <= p[1] <= INT64_MAX for p in groups.values()):
+                    rows = by.get(g)
+                    if rows is None:
+                        rows = by[g] = []
+                    rows.append((x, k))
+                sums = {g: sum(map(_first, rows)) for g, rows in by.items()}
+                if any(not INT64_MIN <= s <= INT64_MAX for s in sums.values()):
                     raise LensOverflow("group sum outside signed 64-bit range")
                 self._db.execute("DELETE FROM opdb_nlens_group")
                 self._db.execute("DELETE FROM opdb_nlens_val")
                 self._db.executemany(
                     "INSERT INTO opdb_nlens_group VALUES (?,?,?)",
-                    ((g, p[0], p[1]) for g, p in groups.items()))
-                self._db.executemany("INSERT INTO opdb_nlens_val VALUES (?,?,?)", vals)
+                    ((g, len(rows), sums[g]) for g, rows in by.items()))
+                total, buf = 0, []
+                for g in sorted(by):            # str order == BINARY collation
+                    rows = by.pop(g)            # free each group once written
+                    rows.sort(key=_first)
+                    buf.extend([(g, x, k) for x, k in rows])
+                    total += len(rows)
+                    if len(buf) >= _REBUILD_CHUNK:
+                        self._db.executemany(
+                            "INSERT INTO opdb_nlens_val VALUES (?,?,?)", buf)
+                        buf.clear()
+                if buf:
+                    self._db.executemany("INSERT INTO opdb_nlens_val VALUES (?,?,?)", buf)
                 self._db.execute(
                     "INSERT OR REPLACE INTO opdb_nlens_meta VALUES (1,?,?,?,?)",
-                    (SCHEMA_VERSION, self._seq(), self._name, len(vals)))
+                    (SCHEMA_VERSION, self._seq(), self._name, total))
                 self._db.execute("COMMIT")
             except BaseException:
                 self._db.execute("ROLLBACK")
