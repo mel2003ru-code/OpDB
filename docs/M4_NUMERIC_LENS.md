@@ -70,3 +70,39 @@ linearly (38,000x at 1M rows). Writes: the Lens adds about 1.5-2.2 ms per
 1,000-row batch (+25% to +31%) and about 50% to the file size. First
 open of a 1M-row file (rebuild) took 4.9 s; reopening a persisted Lens took
 about 1 ms.
+
+## TASK-017: rebuild-from-Source time
+
+Machine: Intel Xeon @ 2.10 GHz, 2 vCPU, 7.8 GB RAM, Linux 6.18 (x86_64,
+glibc 2.39), virtual disk (`/dev/vda`, reported non-rotational), Python
+3.13.18, SQLite 3.53.1, WAL + `synchronous=FULL`. "Before" = unchanged code at
+5d35094; "after" = the same tree plus the `rebuild()` change of this PR. Script:
+`experiments/m17_rebuild_bench.py` (1,000 groups, random 8-byte values, seed 17);
+raw runs in `experiments/results/m17_*.json`. Each cell: median / worst of 7
+runs, ms. "Untrusted open" = open after `lens_seq` was moved back from outside.
+
+| rows | rebuild, before (run 1; run 2) | rebuild, after (run 1; run 2) | untrusted open, before | untrusted open, after |
+| --- | --- | --- | --- | --- |
+| 10k | 25/29; 26/42 | 22/22; 21/22 | 25/26; 30/38 | 26/29; 25/26 |
+| 100k | 314/424; 317/377 | 314/354; 242/288 | 327/396; 322/334 | 250/266; 258/379 |
+| 1M | 5166/5546; 5238/5544 | 3154/3523; 3146/3359 | 5296/5818; 5204/5385 | 3386/3535; 3215/3468 |
+
+Where the time went (one 1M-row rebuild split into steps, `--phases`, ms):
+Source fetch 674, key validation + grouping + decode 674, aggregation 368,
+both `DELETE`s 10, group insert 1, **value-index insert in Source order 3,535**;
+the same insert after sorting 1,356 plus the sort 1,301. COMMIT is not
+measurable separately in this mode (the steps are rolled back).
+
+Change: `rebuild()` collects rows per group and inserts the value index in
+(group, value) order, in chunks inside the same `BEGIN IMMEDIATE`, so the
+`opdb_nlens_val` B-tree fills almost sequentially. Stored format, schema
+version, validation, `open_mode`/`open_reason` and overflow fallback are
+unchanged; tables after the new rebuild were checked equal to the old one's
+on a 200k-row file and to a Source-derived expectation in
+`tests/test_numeric_rebuild_017.py`.
+
+Result: at 1M rows rebuild and untrusted open fell by about 35-40% (about
+5.2 s to 3.2 s), well outside the run-to-run spread. At 100k the two "after"
+runs disagree (one shows no gain for rebuild, one ~24%); at 10k the gain is
+~15% for rebuild and none for open. Rebuild is still O(rows); the remaining
+time is mostly the Python scan, validation and sort. Peak memory was not measured.

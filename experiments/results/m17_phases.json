@@ -1,0 +1,58 @@
+{
+ "machine": {
+  "sha": "5d350947766830521edacbce78b19eed7e166527",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cpus": 2,
+  "os": "Linux-6.18.44-fc-v653-x86_64-with-glibc2.39",
+  "python": "3.13.18",
+  "sqlite": "3.53.1"
+ },
+ "runs": 7,
+ "results": {
+  "10000": {
+   "begin": 0.005035,
+   "source scan (fetch rows)": 5.243055,
+   "key validation, grouping, decode (Python)": 6.737104,
+   "in-memory aggregation": 3.619589,
+   "DELETE opdb_nlens_group": 0.046258,
+   "DELETE opdb_nlens_val": 0.241006,
+   "INSERT opdb_nlens_group": 1.05279,
+   "INSERT opdb_nlens_val (Source order, as before TASK-017)": 9.70958,
+   "sort vals (Python, candidate)": 3.84724,
+   "INSERT opdb_nlens_val (sorted)": 7.547145,
+   "meta write": 0.040842,
+   "COMMIT": "unavailable here (see rebuild() total minus the steps)",
+   "real rebuild() total": 27.556589
+  },
+  "100000": {
+   "begin": 0.004468,
+   "source scan (fetch rows)": 52.040647,
+   "key validation, grouping, decode (Python)": 66.555182,
+   "in-memory aggregation": 29.92701,
+   "DELETE opdb_nlens_group": 0.075483,
+   "DELETE opdb_nlens_val": 1.253068,
+   "INSERT opdb_nlens_group": 0.916909,
+   "INSERT opdb_nlens_val (Source order, as before TASK-017)": 150.325098,
+   "sort vals (Python, candidate)": 60.780271,
+   "INSERT opdb_nlens_val (sorted)": 98.505562,
+   "meta write": 0.072716,
+   "COMMIT": "unavailable here (see rebuild() total minus the steps)",
+   "real rebuild() total": 235.952789
+  },
+  "1000000": {
+   "begin": 0.012243,
+   "source scan (fetch rows)": 673.777518,
+   "key validation, grouping, decode (Python)": 674.182952,
+   "in-memory aggregation": 368.446751,
+   "DELETE opdb_nlens_group": 0.076402,
+   "DELETE opdb_nlens_val": 9.814587,
+   "INSERT opdb_nlens_group": 0.976674,
+   "INSERT opdb_nlens_val (Source order, as before TASK-017)": 3534.82206,
+   "sort vals (Python, candidate)": 1301.451861,
+   "INSERT opdb_nlens_val (sorted)": 1355.759838,
+   "meta write": 0.06388,
+   "COMMIT": "unavailable here (see rebuild() total minus the steps)",
+   "real rebuild() total": 3200.962502
+  }
+ }
+}
