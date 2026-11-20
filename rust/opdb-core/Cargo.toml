@@ -1,0 +1,7 @@
+[package]
+name = "opdb-core"
+version = "0.0.1"
+edition = "2021"
+description = "EXPERIMENTAL Rust storage v0 for OpDB. The file format is unstable."
+
+[dependencies]

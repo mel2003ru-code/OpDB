@@ -16,4 +16,4 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-015 M5 comparison with plain SQLite](TASK-015-m5-sqlite-comparison.md) | M5 | DONE | #67 |
 | [TASK-016 Reduce numeric Lens write cost](TASK-016-numeric-write-cost.md) | M2 | DONE | #70 |
 | [TASK-017 Reduce numeric Lens rebuild time](TASK-017-numeric-rebuild-cost.md) | M3 | DONE | #73 |
-| [TASK-018 Rust storage v0 (experimental)](TASK-018-rust-storage-v0.md) | M6 | READY | |
+| [TASK-018 Rust storage v0 (experimental)](TASK-018-rust-storage-v0.md) | M6 | IN_PROGRESS | |
