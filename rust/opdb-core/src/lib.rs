@@ -6,7 +6,7 @@
 //! CRC-32 u32 over everything before it in the record. All integers LE.
 
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
@@ -19,6 +19,8 @@ const OP_DELETE: u8 = 2;
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
+    /// Another handle or process currently owns this store file.
+    Busy,
     BadMagic,
     UnsupportedVersion(u32),
     /// A complete record failed its checksum or has an unknown op.
@@ -57,9 +59,18 @@ pub struct Store {
 }
 
 impl Store {
+    fn lock(file: &File) -> Result<()> {
+        match file.try_lock() {
+            Ok(()) => Ok(()),
+            Err(TryLockError::WouldBlock) => Err(Error::Busy),
+            Err(TryLockError::Error(error)) => Err(Error::Io(error)),
+        }
+    }
+
     /// Creates a new store; fails if the file already exists.
     pub fn create(path: impl AsRef<Path>) -> Result<Store> {
         let mut f = OpenOptions::new().read(true).write(true).create_new(true).open(path)?;
+        Self::lock(&f)?;
         f.write_all(MAGIC)?;
         f.write_all(&FORMAT_VERSION.to_le_bytes())?;
         f.sync_all()?;
@@ -69,6 +80,7 @@ impl Store {
     /// Opens an existing store and replays its log.
     pub fn open(path: impl AsRef<Path>) -> Result<Store> {
         let mut f = OpenOptions::new().read(true).write(true).open(path)?;
+        Self::lock(&f)?;
         let mut data = Vec::new();
         f.read_to_end(&mut data)?;
         if data.len() < 12 || &data[..8] != MAGIC {

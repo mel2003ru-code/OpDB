@@ -7,7 +7,18 @@ approved by the owner (see issues #53 and #74).
 
 It is an append-only record log (header with magic and format version,
 CRC-32 per record) replayed into an in-memory index on open. It has no WAL,
-no compaction, no concurrency control and no fault-injection testing yet.
+no compaction or fault-injection testing yet. It has exclusive writable access,
+but no concurrent transactions.
 It does not touch or call the Python engine in `opdb/`.
+
+## Experimental exclusive access
+
+Writable `Store` handles now acquire a nonblocking OS file lock before replay
+or mutation and retain it through `close` or `Drop`. A second opener of the
+same file, including another process or a hard-link alias, returns `Error::Busy`.
+This is an advisory `flock` lock on Unix and a Windows file lock; callers that
+ignore the lock can still modify the file. No multi-writer transaction support
+or stable storage format is implied. `create` continues to fail if the path
+already exists.
 
 Run the tests: `cd rust/opdb-core && cargo test`.
