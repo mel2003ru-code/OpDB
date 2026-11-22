@@ -21,4 +21,10 @@ ignore the lock can still modify the file. No multi-writer transaction support
 or stable storage format is implied. `create` continues to fail if the path
 already exists.
 
+Creation prepares and locks a temporary file in the same directory, then
+publishes it through an atomic hard link. Filesystems without hard-link support
+fail closed. An interrupted creation may leave a hidden `.opdb-create-*.tmp`
+file; the store path is either absent or has a complete, locked header at the
+moment of publication. Such temporary files are not removed automatically.
+
 Run the tests: `cd rust/opdb-core && cargo test`.

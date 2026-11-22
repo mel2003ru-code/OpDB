@@ -1,8 +1,11 @@
 use opdb_core::{Error, Store};
 use std::collections::HashMap;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Arc, Barrier};
+use std::thread;
 
 fn path(name: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
@@ -75,4 +78,38 @@ fn failed_open_does_not_create_or_modify_a_file() {
     assert_eq!(fs::read(&path).unwrap(), bytes);
     drop(first);
     fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn concurrent_creators_publish_one_complete_store() {
+    let dir = path("create-race-dir");
+    fs::create_dir(&dir).unwrap();
+    let path = dir.join("store");
+    let barrier = Arc::new(Barrier::new(9));
+    let mut workers = Vec::new();
+    for _ in 0..8 {
+        let path = path.clone();
+        let barrier = Arc::clone(&barrier);
+        workers.push(thread::spawn(move || {
+            barrier.wait();
+            match Store::create(&path) {
+                Ok(mut store) => {
+                    store.put(b"created", b"complete").unwrap();
+                    store.close().unwrap();
+                    true
+                }
+                Err(Error::Io(error)) if error.kind() == ErrorKind::AlreadyExists => false,
+                other => panic!("unexpected create result: {:?}", other.err()),
+            }
+        }));
+    }
+    barrier.wait();
+    let winners = workers.into_iter().map(|worker| worker.join().unwrap()).filter(|won| *won).count();
+    assert_eq!(winners, 1);
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.get(b"created"), Some(&b"complete"[..]));
+    drop(store);
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 1, "temporary aliases must be removed");
+    fs::remove_file(path).unwrap();
+    fs::remove_dir(dir).unwrap();
 }
