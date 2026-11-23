@@ -18,6 +18,8 @@ Linux 7.0.0-43-generic, x86_64, Intel Xeon Icelake, 978220 KiB RAM. Toolchain:
 rustc/cargo 1.93.1, Python 3.14.4, SQLite 3.46.1. Each row is the median of
 three runs; raw per-run values and versions are in the two files under
 `docs/bench/`.
+Each compact raw log has one `RUN` line with resource estimates followed by one
+`RESULT` line containing that run's measurements or explicit skip reason.
 
 Rust v0 results (times for N operations unless identified as sampled per-op):
 
