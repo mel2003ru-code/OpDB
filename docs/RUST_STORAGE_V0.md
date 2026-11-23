@@ -13,29 +13,54 @@ It does not touch or call the Python engine in `opdb/`.
 
 ## TASK-021 measurements (experimental, one VPS)
 
-`examples/bench_v0.rs` runs deterministic 10k, 100k, and 1M key/value cases
-(16 B and 256 B values, three repeats), checks every phase against a separate
-`HashMap`, and stops a case when its conservative disk estimate exceeds the
-currently free space. On VPS1, all 10k and 100k cases completed. All 1M cases
-were skipped: `/tmp` had 143,155,200 free bytes versus estimates of 228,750,018
-bytes (16 B values) and 1,128,750,018 bytes (256 B values). This is an explicit
-resource limit, not a completed 1M benchmark.
+Measured source SHA: `240adaa7283300ab7e72e343b6931b445de748c6`. Host: VPS1,
+Linux 7.0.0-43-generic, x86_64, Intel Xeon Icelake, 978220 KiB RAM. Toolchain:
+rustc/cargo 1.93.1, Python 3.14.4, SQLite 3.46.1. Each row is the median of
+three runs; raw per-run values and versions are in the two files under
+`docs/bench/`.
 
-The reported `replay_open` is a close followed by a full log replay with the
-OS page cache left as-is; it is **not** a cold-cache measurement. Existing and
-missing key reads, sampled put-call percentiles, file size, and sampled process
-peak RSS are recorded. RSS is process-wide, sampled during operations and reset
-for each configuration; it includes the benchmark and oracle allocations, not
-only the store. See `docs/bench/rust-v0-vps1-2026-11-23.txt` for raw output and
-machine/runtime details.
+Rust v0 results (times for N operations unless identified as sampled per-op):
 
-`scripts/bench_sqlite_kv.py` runs the matching deterministic workload against
-SQLite and a separate Python dict oracle. Its local Windows measurements are
-recorded in `docs/bench/sqlite-v0-local-2026-11-23.txt`; they are from a
-different machine and must not be compared as a direct performance ratio with
-the VPS Rust measurements. SQLite's default journal/sync settings also differ
-from Rust's per-operation write behavior. No production engine or data uses
-this experimental store.
+| N | Value B | put total ms | sampled put p50/p95/p99 µs | get existing/missing ms | cold open after put/final ms | final file MB | peak RSS KiB |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 16 | 18.194 | 1.266 / 1.888 / 3.388 | 2.232 / 0.502 | 8.716 / 20.197 | 1.320 | 12,756 |
+| 10,000 | 256 | 44.098 | 3.806 / 5.339 / 9.758 | 3.636 / 0.556 | 36.833 / 74.700 | 6.120 | 29,784 |
+| 100,000 | 16 | 163.668 | 1.271 / 1.838 / 2.989 | 32.499 / 6.890 | 84.237 / 210.702 | 13.200 | 97,508 |
+| 100,000 | 256 | 491.079 | 3.904 / 5.415 / 10.494 | 38.034 / 7.021 | 402.095 / 777.946 | 61.200 | 270,676 |
+
+SQLite results on the **same VPS**, using the same seed, keys, order and
+independent Python dict oracle:
+
+| N | Value B | put ms | get existing/missing ms | overwrite/delete ms | final file MB | peak RSS KiB |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 16 | 32.204 | 86.303 / 90.269 | 38.223 / 15.860 | 0.926 | 23,080 |
+| 10,000 | 256 | 37.177 | 98.078 / 97.034 | 52.071 / 26.256 | 3.568 | 32,144 |
+| 100,000 | 16 | 493.866 | 1,201.253 / 1,160.926 | 704.585 / 330.988 | 9.318 | 63,804 |
+| 100,000 | 256 | 525.468 | 1,127.548 / 1,089.078 | 876.231 / 333.271 | 35.647 | 140,572 |
+
+This is a workload record, not a general speed claim. Rust `put` does not sync
+each call; `close` calls `sync_all`. SQLite uses `journal_mode=delete`,
+`synchronous=FULL`, and one transaction per write phase, so the durability and
+commit boundaries differ. Both implementations verify changed overwrites,
+deletes, and reopened contents against an independent model. Rust cold-open
+timing follows a successful per-file `dd iflag=nocache` cache-drop request;
+the harness does not flush the VPS-wide page cache. Peak RSS is Linux `VmHWM`
+after resetting the benchmark process high-water mark for each configuration;
+it includes keys and the oracle, not just the store.
+
+All 10k/100k cases completed three times. All six Rust 1M cases were skipped
+before writes because `/tmp` had 143,155,200 free bytes: estimated peaks were
+228,750,018 bytes for 16 B values and 1,128,750,018 bytes for 256 B values.
+Thus 1M behavior remains unmeasured. Results do not use production files or
+change the experimental store format.
+
+Exact commands on the measured source:
+
+```text
+cd /tmp/opdb-pr85-rust-check && cargo test --release --offline
+cd /tmp/opdb-pr85-rust-check && cargo run --release --offline --example bench_v0
+python3 /opt/opdb-review-87-rust/bench_sqlite_kv.py --sizes 10000,100000 --value-sizes 16,256 --repeats 3
+```
 
 ## Experimental exclusive access
 

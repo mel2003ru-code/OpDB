@@ -1,0 +1,91 @@
+# Measured source SHA: 240adaa7283300ab7e72e343b6931b445de748c6 (TASK-021 code and scripts)
+# Same VPS1/Linux/x86_64/Xeon Icelake and Python 3.14.4 / SQLite 3.46.1 as Rust log
+# Command: python3 /opt/opdb-review-87-rust/bench_sqlite_kv.py --sizes 10000,100000 --value-sizes 16,256 --repeats 3
+# Temp files: /tmp tmpfs; each SQLite case uses a fresh TemporaryDirectory and checks a 1.5x disk estimate
+# SQLite config per run: journal_mode=delete, synchronous=FULL (2), one transaction per write phase
+# Peak RSS: Linux VmHWM, reset via /proc/self/clear_refs for each case; includes dict oracle
+python=3.14.4 sqlite=3.46.1 seed=20261123
+RUN n=10000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=2287518 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=71.372 file_bytes=913408
+  get_existing_total_ms=194.212
+  get_missing_total_ms=200.728
+  overwrite_total_ms=87.866 delete_total_ms=16.557 after_overwrite_delete_file_bytes=925696 peak_rss_kib=21624
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=10000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=2287518 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=32.204 file_bytes=913408
+  get_existing_total_ms=86.303
+  get_missing_total_ms=89.912
+  overwrite_total_ms=36.651 delete_total_ms=15.860 after_overwrite_delete_file_bytes=925696 peak_rss_kib=23080
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=10000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=2287518 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=27.926 file_bytes=913408
+  get_existing_total_ms=83.313
+  get_missing_total_ms=90.269
+  overwrite_total_ms=38.223 delete_total_ms=15.410 after_overwrite_delete_file_bytes=925696 peak_rss_kib=24016
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=10000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=11287518 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=37.177 file_bytes=3559424
+  get_existing_total_ms=99.987
+  get_missing_total_ms=97.034
+  overwrite_total_ms=48.580 delete_total_ms=26.256 after_overwrite_delete_file_bytes=3567616 peak_rss_kib=29020
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=10000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=11287518 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=34.637 file_bytes=3559424
+  get_existing_total_ms=95.433
+  get_missing_total_ms=91.562
+  overwrite_total_ms=52.071 delete_total_ms=19.976 after_overwrite_delete_file_bytes=3567616 peak_rss_kib=32164
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=10000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=11287518 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=42.291 file_bytes=3559424
+  get_existing_total_ms=98.078
+  get_missing_total_ms=98.503
+  overwrite_total_ms=75.504 delete_total_ms=30.619 after_overwrite_delete_file_bytes=3567616 peak_rss_kib=32144
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=100000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=22875018 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=468.926 file_bytes=9269248
+  get_existing_total_ms=1201.253
+  get_missing_total_ms=1160.926
+  overwrite_total_ms=721.217 delete_total_ms=330.988 after_overwrite_delete_file_bytes=9318400 peak_rss_kib=54192
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=100000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=22875018 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=567.494 file_bytes=9269248
+  get_existing_total_ms=1192.191
+  get_missing_total_ms=1054.133
+  overwrite_total_ms=704.585 delete_total_ms=269.245 after_overwrite_delete_file_bytes=9318400 peak_rss_kib=63804
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=100000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=22875018 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=493.866 file_bytes=9269248
+  get_existing_total_ms=1460.356
+  get_missing_total_ms=1213.995
+  overwrite_total_ms=651.711 delete_total_ms=389.089 after_overwrite_delete_file_bytes=9318400 peak_rss_kib=66272
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=100000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=112875018 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=525.468 file_bytes=35610624
+  get_existing_total_ms=1127.548
+  get_missing_total_ms=1089.078
+  overwrite_total_ms=729.894 delete_total_ms=333.271 after_overwrite_delete_file_bytes=35647488 peak_rss_kib=114564
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=100000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=112875018 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=888.646 file_bytes=35610624
+  get_existing_total_ms=1279.681
+  get_missing_total_ms=1118.052
+  overwrite_total_ms=876.231 delete_total_ms=326.379 after_overwrite_delete_file_bytes=35647488 peak_rss_kib=141276
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=100000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=112875018 free_bytes=143155200 peak_rss_reset=True
+  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
+  put_total_ms=466.507 file_bytes=35610624
+  get_existing_total_ms=1125.305
+  get_missing_total_ms=1039.720
+  overwrite_total_ms=1538.213 delete_total_ms=447.782 after_overwrite_delete_file_bytes=35647488 peak_rss_kib=140572
+RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
