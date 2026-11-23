@@ -19,3 +19,4 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-018 Rust storage v0 (experimental)](TASK-018-rust-storage-v0.md) | M6 | DONE | #77 |
 | [TASK-019 Rust exclusive store access](TASK-019-rust-exclusive-access.md) | M6 | DONE | #80 |
 | [TASK-020 Rust crash/torn-write recovery](TASK-020-rust-crash-recovery.md) | M6 | DONE | #83 |
+| [TASK-021 Measured cost of Rust v0](TASK-021-rust-v0-measurements.md) | M6 | READY | |
