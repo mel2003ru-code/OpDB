@@ -8,6 +8,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 const SEED: u64 = 2_026_11_23;
 const SIZES: [usize; 3] = [10_000, 100_000, 1_000_000];
 const VALUE_SIZES: [usize; 2] = [16, 256];
+static PEAK_RSS_KIB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub(crate) struct Scratch(PathBuf);
 impl Scratch {
@@ -66,6 +67,12 @@ fn rss_kib() -> Option<u64> {
     text.lines().find(|line| line.starts_with("VmRSS:"))?.split_whitespace().nth(1)?.parse().ok()
 }
 
+fn sample_peak_rss() {
+    if let Some(kib)=rss_kib() {
+        PEAK_RSS_KIB.fetch_max(kib, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 fn percentile(sorted: &[u128], p: usize) -> u128 {
     sorted[((sorted.len() - 1) * p + 99) / 100]
 }
@@ -97,6 +104,7 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     for &i in &order {
         let k = &keys[i]; let v = value(i, vsize); let t = Instant::now();
         store.put(k, &v).unwrap();
+        if i % sample_stride(n) == 0 { sample_peak_rss(); }
         if i % sample_stride(n) == 0 { samples.push(t.elapsed().as_nanos()); }
         model.insert(k.clone(), v);
     }
@@ -108,6 +116,7 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     let mut store = Store::open(&path).unwrap();
     let open_put = start.elapsed().as_nanos();
     verify(&store, &model, &keys);
+    sample_peak_rss();
     println!("  cold_open_after_put_ms={:.3} file_bytes={size_put}", open_put as f64/1e6);
 
     for &i in &order {
@@ -118,15 +127,24 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     for k in &missing { assert_eq!(store.get(k), None); }
     println!("  get_missing_total_ms={:.3}", start.elapsed().as_secs_f64()*1e3);
 
-    for &i in &order { let v=value(i,vsize); store.put(&keys[i], &v).unwrap(); }
-    for &i in order.iter().step_by(2) { assert!(store.delete(&keys[i]).unwrap()); model.remove(&keys[i]); }
+    for &i in &order {
+        let v=value(i,vsize); store.put(&keys[i], &v).unwrap();
+        if i % sample_stride(n) == 0 { sample_peak_rss(); }
+    }
+    for &i in order.iter().step_by(2) {
+        assert!(store.delete(&keys[i]).unwrap()); model.remove(&keys[i]);
+        if i % sample_stride(n) == 0 { sample_peak_rss(); }
+    }
     verify(&store, &model, &keys);
     store.close().unwrap();
     let size_after = fs::metadata(&path).unwrap().len();
     let start = Instant::now();
     let store = Store::open(&path).unwrap();
-    println!("  cold_open_after_overwrite_delete_ms={:.3} file_bytes={size_after} rss_kib={:?}",
-        start.elapsed().as_secs_f64()*1e3, rss_kib());
+    sample_peak_rss();
+    println!("  cold_open_after_overwrite_delete_ms={:.3} file_bytes={size_after} peak_rss_kib={:?}",
+        start.elapsed().as_secs_f64()*1e3,
+        (PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed) != 0)
+            .then(|| PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed)));
     verify(&store, &model, &keys);
     drop(store);
     println!("RESULT PASS correctness checked after put, overwrite/delete, close/reopen");
