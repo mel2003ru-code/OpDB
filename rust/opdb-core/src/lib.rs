@@ -6,19 +6,24 @@
 //! CRC-32 u32 over everything before it in the record. All integers LE.
 
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const MAGIC: &[u8; 8] = b"OPDBRS0\0";
 pub const FORMAT_VERSION: u32 = 0;
 const HEADER_LEN: u64 = 12;
 const OP_PUT: u8 = 1;
 const OP_DELETE: u8 = 2;
+static CREATE_NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
+    /// Another handle or process currently owns this store file.
+    Busy,
     BadMagic,
     UnsupportedVersion(u32),
     /// A complete record failed its checksum or has an unknown op.
@@ -57,18 +62,60 @@ pub struct Store {
 }
 
 impl Store {
+    fn lock(file: &File) -> Result<()> {
+        match file.try_lock() {
+            Ok(()) => Ok(()),
+            Err(TryLockError::WouldBlock) => Err(Error::Busy),
+            Err(TryLockError::Error(error)) => Err(Error::Io(error)),
+        }
+    }
+
     /// Creates a new store; fails if the file already exists.
+    /// The file is published only after its lock and header are ready.
     pub fn create(path: impl AsRef<Path>) -> Result<Store> {
-        let mut f = OpenOptions::new().read(true).write(true).create_new(true).open(path)?;
-        f.write_all(MAGIC)?;
-        f.write_all(&FORMAT_VERSION.to_le_bytes())?;
-        f.sync_all()?;
-        Ok(Store { file: Some(f), index: HashMap::new(), valid_len: HEADER_LEN, truncated_tail_at: None })
+        let path = path.as_ref();
+        if path.file_name().is_none() {
+            return Err(Error::Io(io::Error::new(io::ErrorKind::InvalidInput, "store path has no file name")));
+        }
+        let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        for _ in 0..16 {
+            let nonce = CREATE_NONCE.fetch_add(1, Ordering::Relaxed);
+            let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+            let temp = parent.join(format!(".opdb-create-{}-{stamp}-{nonce}.tmp", std::process::id()));
+            let mut f = match OpenOptions::new().read(true).write(true).create_new(true).open(&temp) {
+                Ok(file) => file,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(Error::Io(error)),
+            };
+            let prepared = (|| -> Result<()> {
+                Self::lock(&f)?;
+                f.write_all(MAGIC)?;
+                f.write_all(&FORMAT_VERSION.to_le_bytes())?;
+                f.sync_all()?;
+                // Hard-link creation fails if path already exists; rename could overwrite it.
+                fs::hard_link(&temp, path)?;
+                Ok(())
+            })();
+            match prepared {
+                Ok(()) => {
+                    // After publication, cleanup failure must not turn a valid store into an error.
+                    let _ = fs::remove_file(&temp);
+                    return Ok(Store { file: Some(f), index: HashMap::new(), valid_len: HEADER_LEN, truncated_tail_at: None });
+                }
+                Err(error) => {
+                    drop(f);
+                    let _ = fs::remove_file(&temp);
+                    return Err(error);
+                }
+            }
+        }
+        Err(Error::Io(io::Error::new(io::ErrorKind::AlreadyExists, "temporary store name collisions")))
     }
 
     /// Opens an existing store and replays its log.
     pub fn open(path: impl AsRef<Path>) -> Result<Store> {
         let mut f = OpenOptions::new().read(true).write(true).open(path)?;
+        Self::lock(&f)?;
         let mut data = Vec::new();
         f.read_to_end(&mut data)?;
         if data.len() < 12 || &data[..8] != MAGIC {
