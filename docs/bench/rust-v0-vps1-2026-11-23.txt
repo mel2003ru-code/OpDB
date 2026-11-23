@@ -1,0 +1,101 @@
+Machine and toolchain captured 2026-11-23 before this benchmark run:
+rustc 1.93.1 (01f6ddf75 2026-02-11) (built from a source tarball)
+cargo 1.93.1 (083ac5135 2025-12-15) (built from a source tarball)
+Python 3.14.4
+3.46.1
+Linux 7.0.0-43-generic x86_64
+Model name:                              Intel Xeon Processor (Icelake)
+               total        used        free      shared  buff/cache   available
+Mem:             955         452          18           5         510         502
+
+Exact command: cd /tmp/opdb-pr85-rust-check && CARGO_NET_OFFLINE=true cargo run --offline --release --example bench_v0
+The run harness prints each raw run below, including skipped cases and its free-space estimate. Temporary benchmark files were removed by Drop.
+
+   Compiling opdb-core v0.0.1 (/tmp/opdb-pr85-rust-check)
+    Finished `release` profile [optimized] target(s) in 3.14s
+     Running `target/release/examples/bench_v0`
+os=linux arch=x86_64 temp=/tmp rust=see rustc --version seed=20261123
+RUN n=10000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=2287518 free_bytes=179576832
+  put: total_ms=26.379 sampled_op_us_median=1.222 p95=1.957 p99=4.391
+  cold_open_after_put_ms=8.824 file_bytes=560012
+  get_missing_total_ms=0.555
+  cold_open_after_overwrite_delete_ms=22.076 file_bytes=1320012 rss_kib=Some(10420)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=10000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=2287518 free_bytes=179576832
+  put: total_ms=19.269 sampled_op_us_median=1.189 p95=1.686 p99=2.909
+  cold_open_after_put_ms=7.711 file_bytes=560012
+  get_missing_total_ms=0.400
+  cold_open_after_overwrite_delete_ms=21.445 file_bytes=1320012 rss_kib=Some(11696)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=10000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=2287518 free_bytes=179576832
+  put: total_ms=18.858 sampled_op_us_median=1.194 p95=1.818 p99=2.976
+  cold_open_after_put_ms=7.249 file_bytes=560012
+  get_missing_total_ms=0.428
+  cold_open_after_overwrite_delete_ms=21.088 file_bytes=1320012 rss_kib=Some(11872)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=10000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=11287518 free_bytes=179576832
+  put: total_ms=48.371 sampled_op_us_median=3.681 p95=5.376 p99=9.393
+  cold_open_after_put_ms=46.072 file_bytes=2960012
+  get_missing_total_ms=0.486
+  cold_open_after_overwrite_delete_ms=93.636 file_bytes=6120012 rss_kib=Some(17436)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=10000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=11287518 free_bytes=179576832
+  put: total_ms=50.250 sampled_op_us_median=3.691 p95=5.333 p99=9.938
+  cold_open_after_put_ms=38.473 file_bytes=2960012
+  get_missing_total_ms=0.610
+  cold_open_after_overwrite_delete_ms=76.522 file_bytes=6120012 rss_kib=Some(23416)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=10000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=11287518 free_bytes=179576832
+  put: total_ms=47.930 sampled_op_us_median=3.680 p95=5.418 p99=9.369
+  cold_open_after_put_ms=39.467 file_bytes=2960012
+  get_missing_total_ms=0.443
+  cold_open_after_overwrite_delete_ms=73.521 file_bytes=6120012 rss_kib=Some(27824)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=100000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=22875018 free_bytes=179576832
+  put: total_ms=212.238 sampled_op_us_median=1.251 p95=1.807 p99=2.818
+  cold_open_after_put_ms=86.878 file_bytes=5600012
+  get_missing_total_ms=7.568
+  cold_open_after_overwrite_delete_ms=298.476 file_bytes=13200012 rss_kib=Some(73728)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=100000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=22875018 free_bytes=179576832
+  put: total_ms=258.408 sampled_op_us_median=1.409 p95=2.026 p99=3.217
+  cold_open_after_put_ms=93.684 file_bytes=5600012
+  get_missing_total_ms=10.110
+  cold_open_after_overwrite_delete_ms=211.798 file_bytes=13200012 rss_kib=Some(86604)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=100000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=22875018 free_bytes=179576832
+  put: total_ms=203.599 sampled_op_us_median=1.269 p95=1.835 p99=2.879
+  cold_open_after_put_ms=77.552 file_bytes=5600012
+  get_missing_total_ms=6.936
+  cold_open_after_overwrite_delete_ms=200.894 file_bytes=13200012 rss_kib=Some(86604)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=100000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=112875018 free_bytes=179576832
+  put: total_ms=805.221 sampled_op_us_median=4.095 p95=6.212 p99=23.578
+  cold_open_after_put_ms=515.826 file_bytes=29600012
+  get_missing_total_ms=6.963
+  cold_open_after_overwrite_delete_ms=954.546 file_bytes=61200012 rss_kib=Some(143624)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=100000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=112875018 free_bytes=179572736
+  put: total_ms=506.051 sampled_op_us_median=3.773 p95=5.353 p99=8.929
+  cold_open_after_put_ms=384.253 file_bytes=29600012
+  get_missing_total_ms=9.535
+  cold_open_after_overwrite_delete_ms=798.132 file_bytes=61200012 rss_kib=Some(160056)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=100000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=112875018 free_bytes=179572736
+  put: total_ms=536.902 sampled_op_us_median=3.818 p95=5.605 p99=11.890
+  cold_open_after_put_ms=362.021 file_bytes=29600012
+  get_missing_total_ms=8.100
+  cold_open_after_overwrite_delete_ms=768.686 file_bytes=61200012 rss_kib=Some(160056)
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=1000000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=228750018 free_bytes=179572736
+RESULT SKIPPED_INSUFFICIENT_DISK
+RUN n=1000000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=228750018 free_bytes=179572736
+RESULT SKIPPED_INSUFFICIENT_DISK
+RUN n=1000000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=228750018 free_bytes=179572736
+RESULT SKIPPED_INSUFFICIENT_DISK
+RUN n=1000000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=179572736
+RESULT SKIPPED_INSUFFICIENT_DISK
+RUN n=1000000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=179572736
+RESULT SKIPPED_INSUFFICIENT_DISK
+RUN n=1000000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=179572736
+RESULT SKIPPED_INSUFFICIENT_DISK
