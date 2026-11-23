@@ -37,6 +37,16 @@ def estimate(n, size):
     return int(((n*2+n//2)*(13+32+size)+12)*1.5 + .999999)
 
 
+def current_rss_kib():
+    try:
+        for line in Path('/proc/self/status').read_text().splitlines():
+            if line.startswith('VmRSS:'):
+                return int(line.split()[1])
+    except OSError:
+        pass
+    return None
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--sizes",default="10000,100000,1000000")
@@ -58,14 +68,21 @@ def main():
                     db = Path(directory)/"kv.sqlite3"
                     conn = sqlite3.connect(db)
                     conn.execute("CREATE TABLE kv (k BLOB PRIMARY KEY, v BLOB NOT NULL)")
+                    journal = conn.execute("PRAGMA journal_mode").fetchone()[0]
+                    synchronous = conn.execute("PRAGMA synchronous").fetchone()[0]
                     keys = [key(i) for i in range(n)]; seq = order(n)
+                    values = [value(i,size) for i in range(n)]
                     expected = {}
+                    peak_rss = current_rss_kib()
+                    print(f"  sqlite_journal_mode={journal} synchronous={synchronous} (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase")
                     started = time.perf_counter()
                     for i in seq:
-                        k, v = keys[i], value(i,size)
-                        conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(k,v)); expected[k]=v
+                        conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(keys[i],values[i]))
                     conn.commit()
-                    print(f"  put_total_ms={(time.perf_counter()-started)*1000:.3f} file_bytes={db.stat().st_size}")
+                    put_ms=(time.perf_counter()-started)*1000
+                    expected.update((keys[i],values[i]) for i in seq)
+                    peak_rss = max(filter(None, (peak_rss, current_rss_kib())), default=None)
+                    print(f"  put_total_ms={put_ms:.3f} file_bytes={db.stat().st_size}")
                     def verify():
                         for k in keys:
                             row=conn.execute("SELECT v FROM kv WHERE k=?",(k,)).fetchone()
@@ -76,24 +93,32 @@ def main():
                         row=conn.execute("SELECT v FROM kv WHERE k=?",(keys[i],)).fetchone()
                         if row is None or row[0] != expected[keys[i]]: raise RuntimeError("ORACLE_MISMATCH_GET")
                     print(f"  get_existing_total_ms={(time.perf_counter()-started)*1000:.3f}")
+                    peak_rss = max(filter(None, (peak_rss, current_rss_kib())), default=None)
                     started=time.perf_counter()
                     for i in range(n,2*n):
                         if conn.execute("SELECT v FROM kv WHERE k=?",(key(i),)).fetchone() is not None:
                             raise RuntimeError("UNEXPECTED_MISSING_KEY")
                     print(f"  get_missing_total_ms={(time.perf_counter()-started)*1000:.3f}")
+                    peak_rss = max(filter(None, (peak_rss, current_rss_kib())), default=None)
+                    overwrite_values=[value(i+n,size) for i in range(n)]
                     started=time.perf_counter()
                     for i in seq:
-                        updated=value(i+n,size)
-                        conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(keys[i],updated))
-                        expected[keys[i]]=updated
-                    conn.commit(); verify()
+                        conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(keys[i],overwrite_values[i]))
+                    conn.commit(); overwrite_ms=(time.perf_counter()-started)*1000
+                    expected.update((keys[i],overwrite_values[i]) for i in seq)
+                    verify()
+                    started=time.perf_counter()
                     for i in seq[::2]:
-                        conn.execute("DELETE FROM kv WHERE k=?",(keys[i],));expected.pop(keys[i])
-                    conn.commit(); verify(); conn.close()
+                        conn.execute("DELETE FROM kv WHERE k=?",(keys[i],))
+                    conn.commit(); delete_ms=(time.perf_counter()-started)*1000
+                    for i in seq[::2]: expected.pop(keys[i])
+                    verify(); conn.close()
+                    peak_rss = max(filter(None, (peak_rss, current_rss_kib())), default=None)
                     size_after=db.stat().st_size
                     conn=sqlite3.connect(db); verify(); conn.close()
-                    print(f"  after_overwrite_delete_file_bytes={size_after} phase_total_ms={(time.perf_counter()-started)*1000:.3f}")
-                    print("RESULT PASS independent Python dict checked after every phase and reopen; SQLite default synchronous/journal settings; SQLite commit sync semantics differ from Rust put")
+                    peak_rss = max(filter(None, (peak_rss, current_rss_kib())), default=None)
+                    print(f"  overwrite_total_ms={overwrite_ms:.3f} delete_total_ms={delete_ms:.3f} after_overwrite_delete_file_bytes={size_after} peak_rss_kib={peak_rss}")
+                    print("RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put")
 
 
 if __name__=="__main__": main()

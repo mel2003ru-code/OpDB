@@ -127,10 +127,12 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
         let k = &keys[i]; let v = &values[i]; let t = Instant::now();
         store.put(k, v).unwrap();
         let elapsed = t.elapsed().as_nanos();
-        if i % sample_stride(n) == 0 { samples.push(elapsed); sample_peak_rss(); }
-        model.insert(k.clone(), v.clone());
+        if i % sample_stride(n) == 0 { samples.push(elapsed); }
     }
-    stats("put", &mut samples, start.elapsed().as_nanos());
+    let put_elapsed = start.elapsed().as_nanos();
+    for &i in &order { model.insert(keys[i].clone(), values[i].clone()); }
+    sample_peak_rss();
+    stats("put", &mut samples, put_elapsed);
     verify(&store, &model, &keys);
     store.close().unwrap();
     let size_put = fs::metadata(&path).unwrap().len();
