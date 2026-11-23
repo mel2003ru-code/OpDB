@@ -69,7 +69,7 @@ waiting, and any question for the owner. Three to six sentences.
 ## Limits
 
 - At most one open task pull request at a time.
-- At most three merges per calendar day (UTC).
+- No daily limit on the number of merges. Every merge still requires the independent review, successful CI, task acceptance checks, and other safeguards above.
 - A task pull request adds at most about 600 lines, tests included.
 - Standard library only unless the task file says otherwise.
 
