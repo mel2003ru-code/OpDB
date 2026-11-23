@@ -67,11 +67,13 @@ fn every_short_record_cut_preserves_only_complete_prefix() {
         (1, b"k".to_vec(), b"v".to_vec()), (2, vec![], vec![]),
         (2, vec![0, 255], vec![]),
     ];
+    let mut observed = 0;
     for (op, key, value) in cases {
         let prefix = record(1, &key, b"verified");
         let target = record(op, &key, &value);
         let prefix_end = (header().len() + prefix.len()) as u64;
         for cut in 0..=target.len() {
+            observed += 1;
             let scratch = Scratch::new();
             let mut bytes = header();
             bytes.extend_from_slice(&prefix);
@@ -101,6 +103,7 @@ fn every_short_record_cut_preserves_only_complete_prefix() {
             assert_eq!(reopened.truncated_tail(), None);
         }
     }
+    println!("TASK020 short-record offsets: {observed}; all matched verified prefixes");
 }
 
 #[test]
@@ -151,6 +154,7 @@ fn large_binary_record_selected_cuts_and_mixed_prefixes() {
             expected.remove(&key);
         }
     }
+    println!("TASK020 large-record cuts: 8 seeds x 9 offsets; two reopens after repair matched HashMap");
 }
 
 #[test]
@@ -213,6 +217,7 @@ fn corrupt_complete_records_are_errors_and_damaged_lengths_are_explicit_tails() 
     store.repair().unwrap();
     store.close().unwrap();
     assert_eq!(Store::open(&path).unwrap().get(b"a"), Some(b"value".as_slice()));
+    println!("TASK020 corruption: magic/version/CRC/op rejected; damaged lengths and extra byte reported tail");
 }
 
 #[test]
@@ -269,5 +274,6 @@ fn killed_writer_yields_only_the_confirmed_prefix() {
         expected.insert(b"a".to_vec(), if stop_at == 2 { b"three".to_vec() } else { b"one".to_vec() });
         if stop_at >= 1 { expected.insert(b"b".to_vec(), b"two".to_vec()); }
         check_map(&store, &expected, &[b"a".to_vec(), b"b".to_vec()]);
+        println!("TASK020 killed writer after step {stop_at}: {} verified keys, no incomplete tail", expected.len());
     }
 }
