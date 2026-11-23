@@ -16,6 +16,8 @@ It does not touch or call the Python engine in `opdb/`.
 Writable `Store` handles now acquire a nonblocking OS file lock before replay
 or mutation and retain it through `close` or `Drop`. A second opener of the
 same file, including another process or a hard-link alias, returns `Error::Busy`.
+On Unix, a forked child can inherit the locked file descriptor until exec;
+`flock` is released only after every inherited copy is closed.
 This is an advisory `flock` lock on Unix and a Windows file lock; callers that
 ignore the lock can still modify the file. No multi-writer transaction support
 or stable storage format is implied. `create` continues to fail if the path

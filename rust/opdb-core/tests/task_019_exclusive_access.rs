@@ -4,7 +4,11 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex};
+
+// Keep tests that own flock locks separate from tests spawning children:
+// fork can temporarily inherit a locked descriptor before exec.
+static EXCLUSIVE_TEST_GUARD: Mutex<()> = Mutex::new(());
 use std::thread;
 
 fn path(name: &str) -> PathBuf {
@@ -16,6 +20,7 @@ fn path(name: &str) -> PathBuf {
 
 #[test]
 fn second_handle_is_busy_and_replay_matches_model() {
+    let _guard = EXCLUSIVE_TEST_GUARD.lock().unwrap();
     let path = path("handles");
     let mut first = Store::create(&path).unwrap();
     let mut model = HashMap::new();
@@ -48,6 +53,7 @@ fn lock_child_probe() {
 
 #[test]
 fn second_process_and_hard_link_alias_are_busy() {
+    let _guard = EXCLUSIVE_TEST_GUARD.lock().unwrap();
     let path = path("process");
     let alias = path.with_extension("alias");
     let mut first = Store::create(&path).unwrap();
@@ -69,6 +75,7 @@ fn second_process_and_hard_link_alias_are_busy() {
 
 #[test]
 fn failed_open_does_not_create_or_modify_a_file() {
+    let _guard = EXCLUSIVE_TEST_GUARD.lock().unwrap();
     let path = path("missing");
     assert!(Store::open(&path).is_err());
     assert!(!path.exists());
@@ -82,6 +89,7 @@ fn failed_open_does_not_create_or_modify_a_file() {
 
 #[test]
 fn concurrent_creators_publish_one_complete_store() {
+    let _guard = EXCLUSIVE_TEST_GUARD.lock().unwrap();
     let dir = path("create-race-dir");
     fs::create_dir(&dir).unwrap();
     let path = dir.join("store");
