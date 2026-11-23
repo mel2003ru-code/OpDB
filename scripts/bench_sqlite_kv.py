@@ -72,13 +72,21 @@ def main():
                             if (row[0] if row else None)!=expected.get(k): raise RuntimeError("ORACLE_MISMATCH")
                     verify()
                     started=time.perf_counter()
-                    for i in seq: conn.execute("SELECT v FROM kv WHERE k=?",(keys[i],)).fetchone()
+                    for i in seq:
+                        row=conn.execute("SELECT v FROM kv WHERE k=?",(keys[i],)).fetchone()
+                        if row is None or row[0] != expected[keys[i]]: raise RuntimeError("ORACLE_MISMATCH_GET")
                     print(f"  get_existing_total_ms={(time.perf_counter()-started)*1000:.3f}")
                     started=time.perf_counter()
-                    for i in range(n,2*n): conn.execute("SELECT v FROM kv WHERE k=?",(key(i),)).fetchone()
+                    for i in range(n,2*n):
+                        if conn.execute("SELECT v FROM kv WHERE k=?",(key(i),)).fetchone() is not None:
+                            raise RuntimeError("UNEXPECTED_MISSING_KEY")
                     print(f"  get_missing_total_ms={(time.perf_counter()-started)*1000:.3f}")
                     started=time.perf_counter()
-                    for i in seq: conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(keys[i],value(i,size)))
+                    for i in seq:
+                        updated=value(i+n,size)
+                        conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(keys[i],updated))
+                        expected[keys[i]]=updated
+                    conn.commit(); verify()
                     for i in seq[::2]:
                         conn.execute("DELETE FROM kv WHERE k=?",(keys[i],));expected.pop(keys[i])
                     conn.commit(); verify(); conn.close()

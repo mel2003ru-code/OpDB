@@ -33,6 +33,25 @@ fn free_bytes(path: &Path) -> u64 {
     kb * 1024
 }
 
+fn evict_file_cache(path: &Path) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        // GNU dd's iflag=nocache requests that the kernel discard this input
+        // file's cached pages after reading. The benchmark file is private and
+        // freshly created; this avoids flushing the VPS-wide page cache.
+        return path.to_str().is_some_and(|input| {
+            std::process::Command::new("dd")
+                .args([format!("if={input}"), "of=/dev/null".into(),
+                       "iflag=nocache".into(), "status=none".into()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status().is_ok_and(|status| status.success())
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = path; false }
+}
+
 fn estimate_bytes(n: usize, value_size: usize) -> u64 {
     // Each key is written once, overwritten once, and half deleted; each record
     // adds 13 bytes plus key/value. Include header and a 1.5x safety margin.
@@ -97,32 +116,36 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     let scratch = Scratch::new();
     let path = scratch.file("rust");
     let keys: Vec<Vec<u8>> = (0..n).map(key).collect();
+    let values: Vec<Vec<u8>> = (0..n).map(|i| value(i, vsize)).collect();
+    let overwrite_values: Vec<Vec<u8>> = (0..n).map(|i| value(i.wrapping_add(n), vsize)).collect();
     let order = order(n);
     let mut model = std::collections::HashMap::<Vec<u8>, Vec<u8>>::new();
     let mut store = Store::create(&path).unwrap();
     let mut samples = Vec::with_capacity(n.div_ceil(sample_stride(n)));
     let start = Instant::now();
     for &i in &order {
-        let k = &keys[i]; let v = value(i, vsize); let t = Instant::now();
-        store.put(k, &v).unwrap();
-        if i % sample_stride(n) == 0 { sample_peak_rss(); }
-        if i % sample_stride(n) == 0 { samples.push(t.elapsed().as_nanos()); }
-        model.insert(k.clone(), v);
+        let k = &keys[i]; let v = &values[i]; let t = Instant::now();
+        store.put(k, v).unwrap();
+        let elapsed = t.elapsed().as_nanos();
+        if i % sample_stride(n) == 0 { samples.push(elapsed); sample_peak_rss(); }
+        model.insert(k.clone(), v.clone());
     }
     stats("put", &mut samples, start.elapsed().as_nanos());
     verify(&store, &model, &keys);
     store.close().unwrap();
     let size_put = fs::metadata(&path).unwrap().len();
+    let put_cache_evicted = evict_file_cache(&path);
     let start = Instant::now();
     let mut store = Store::open(&path).unwrap();
     let open_put = start.elapsed().as_nanos();
     verify(&store, &model, &keys);
     sample_peak_rss();
-    println!("  replay_open_after_put_ms={:.3} file_bytes={size_put}", open_put as f64/1e6);
+    println!("  {}_after_put_ms={:.3} file_bytes={size_put} cache_evict={put_cache_evicted}",
+        if put_cache_evicted { "cold_open" } else { "replay_open" }, open_put as f64/1e6);
 
     let start = Instant::now();
     for &i in &order {
-        assert_eq!(store.get(&keys[i]), Some(value(i,vsize).as_slice()));
+        assert_eq!(store.get(&keys[i]), Some(values[i].as_slice()));
     }
     println!("  get_existing_total_ms={:.3}", start.elapsed().as_secs_f64()*1e3);
     let missing: Vec<Vec<u8>> = (n..2*n).map(key).collect();
@@ -131,9 +154,12 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     println!("  get_missing_total_ms={:.3}", start.elapsed().as_secs_f64()*1e3);
 
     for &i in &order {
-        let v=value(i,vsize); store.put(&keys[i], &v).unwrap();
+        let v = &overwrite_values[i];
+        store.put(&keys[i], v).unwrap();
+        model.insert(keys[i].clone(), v.clone());
         if i % sample_stride(n) == 0 { sample_peak_rss(); }
     }
+    verify(&store, &model, &keys);
     for &i in order.iter().step_by(2) {
         assert!(store.delete(&keys[i]).unwrap()); model.remove(&keys[i]);
         if i % sample_stride(n) == 0 { sample_peak_rss(); }
@@ -141,11 +167,12 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     verify(&store, &model, &keys);
     store.close().unwrap();
     let size_after = fs::metadata(&path).unwrap().len();
+    let final_cache_evicted = evict_file_cache(&path);
     let start = Instant::now();
     let store = Store::open(&path).unwrap();
     sample_peak_rss();
-    println!("  replay_open_after_overwrite_delete_ms={:.3} file_bytes={size_after} peak_rss_kib={:?}",
-        start.elapsed().as_secs_f64()*1e3,
+    println!("  {}_after_overwrite_delete_ms={:.3} file_bytes={size_after} cache_evict={final_cache_evicted} peak_rss_kib={:?}",
+        if final_cache_evicted { "cold_open" } else { "replay_open" }, start.elapsed().as_secs_f64()*1e3,
         (PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed) != 0)
             .then(|| PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed)));
     verify(&store, &model, &keys);
