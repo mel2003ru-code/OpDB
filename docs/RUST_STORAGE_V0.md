@@ -7,7 +7,7 @@ approved by the owner (see issues #53 and #74).
 
 It is an append-only record log (header with magic and format version,
 CRC-32 per record) replayed into an in-memory index on open. It has no WAL,
-no compaction or fault-injection testing yet. It has exclusive writable access,
+no compaction. It has exclusive writable access,
 but no concurrent transactions.
 It does not touch or call the Python engine in `opdb/`.
 
@@ -30,3 +30,37 @@ file; the store path is either absent or has a complete, locked header at the
 moment of publication. Such temporary files are not removed automatically.
 
 Run the tests: `cd rust/opdb-core && cargo test`.
+
+## Experimental recovery evidence
+
+The TASK-020 tests construct raw log records with a test-only encoder and
+compare replay to a separate `HashMap` model. Every byte offset of five short
+put/delete records is tested after a verified prefix, including empty and
+binary keys/values. Eight seeded 24-operation put/overwrite/delete prefixes
+are tested with nine selected cuts of a larger binary record. A partial
+record leaves all preceding complete records visible, reports
+`truncated_tail()`, and refuses `put` and `delete`. Explicit `repair()`
+truncates to the last complete record; the tests reopen, compare the model,
+write again, and reopen a second time.
+
+Complete records with an invalid CRC or operation are rejected as
+`Error::Corrupt`. Wrong magic and version are rejected before replay. A
+damaged length field can look identical to a truncated tail; this format
+cannot prove whether the length or the file was damaged. The tests therefore
+require an explicit tail report and deny mutation, but do **not** claim
+corruption detection for that case. An extra trailing byte is likewise a
+reported incomplete tail.
+
+On Linux, a child process writes a temporary store and waits at three
+different points between operations. The parent kills it, reopens the store
+in a separate process, and checks that it contains exactly the confirmed
+operation prefix. This is a controlled process interruption between writes,
+not a power cut or an injected mid-system-call write failure. The byte-cut
+tests cover parsing of incomplete records; they do not establish the
+filesystem's write atomicity.
+
+`put` does not call `fsync`, and neither successful `put` nor a killed
+process proves persistence across power failure. Directory sync after
+creation and storage-device failure behavior are also unverified. Do not
+store durable user data in this experiment or treat `repair()` as a general
+corruption recovery tool. No permanent disk format or WAL decision was made.
