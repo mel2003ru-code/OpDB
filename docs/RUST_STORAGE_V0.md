@@ -11,6 +11,32 @@ no compaction. It has exclusive writable access,
 but no concurrent transactions.
 It does not touch or call the Python engine in `opdb/`.
 
+## TASK-021 measurements (experimental, one VPS)
+
+`examples/bench_v0.rs` runs deterministic 10k, 100k, and 1M key/value cases
+(16 B and 256 B values, three repeats), checks every phase against a separate
+`HashMap`, and stops a case when its conservative disk estimate exceeds the
+currently free space. On VPS1, all 10k and 100k cases completed. All 1M cases
+were skipped: `/tmp` had 143,155,200 free bytes versus estimates of 228,750,018
+bytes (16 B values) and 1,128,750,018 bytes (256 B values). This is an explicit
+resource limit, not a completed 1M benchmark.
+
+The reported `replay_open` is a close followed by a full log replay with the
+OS page cache left as-is; it is **not** a cold-cache measurement. Existing and
+missing key reads, sampled put-call percentiles, file size, and sampled process
+peak RSS are recorded. RSS is process-wide, sampled during operations and reset
+for each configuration; it includes the benchmark and oracle allocations, not
+only the store. See `docs/bench/rust-v0-vps1-2026-11-23.txt` for raw output and
+machine/runtime details.
+
+`scripts/bench_sqlite_kv.py` runs the matching deterministic workload against
+SQLite and a separate Python dict oracle. Its local Windows measurements are
+recorded in `docs/bench/sqlite-v0-local-2026-11-23.txt`; they are from a
+different machine and must not be compared as a direct performance ratio with
+the VPS Rust measurements. SQLite's default journal/sync settings also differ
+from Rust's per-operation write behavior. No production engine or data uses
+this experimental store.
+
 ## Experimental exclusive access
 
 Writable `Store` handles now acquire a nonblocking OS file lock before replay

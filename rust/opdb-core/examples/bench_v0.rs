@@ -93,6 +93,7 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
         println!("RESULT SKIPPED_INSUFFICIENT_DISK");
         return;
     }
+    PEAK_RSS_KIB.store(0, std::sync::atomic::Ordering::Relaxed);
     let scratch = Scratch::new();
     let path = scratch.file("rust");
     let keys: Vec<Vec<u8>> = (0..n).map(key).collect();
@@ -117,11 +118,13 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     let open_put = start.elapsed().as_nanos();
     verify(&store, &model, &keys);
     sample_peak_rss();
-    println!("  cold_open_after_put_ms={:.3} file_bytes={size_put}", open_put as f64/1e6);
+    println!("  replay_open_after_put_ms={:.3} file_bytes={size_put}", open_put as f64/1e6);
 
+    let start = Instant::now();
     for &i in &order {
         assert_eq!(store.get(&keys[i]), Some(value(i,vsize).as_slice()));
     }
+    println!("  get_existing_total_ms={:.3}", start.elapsed().as_secs_f64()*1e3);
     let missing: Vec<Vec<u8>> = (n..2*n).map(key).collect();
     let start = Instant::now();
     for k in &missing { assert_eq!(store.get(k), None); }
@@ -141,7 +144,7 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     let start = Instant::now();
     let store = Store::open(&path).unwrap();
     sample_peak_rss();
-    println!("  cold_open_after_overwrite_delete_ms={:.3} file_bytes={size_after} peak_rss_kib={:?}",
+    println!("  replay_open_after_overwrite_delete_ms={:.3} file_bytes={size_after} peak_rss_kib={:?}",
         start.elapsed().as_secs_f64()*1e3,
         (PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed) != 0)
             .then(|| PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed)));
