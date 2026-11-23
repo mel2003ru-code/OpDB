@@ -1,108 +1,109 @@
-# Measured source SHA: 240adaa7283300ab7e72e343b6931b445de748c6 (TASK-021 code and scripts)
+# Measured source SHA: e9bbefccf421253175667c72fd78d67a0ae86097 (TASK-021 benchmark code and scripts)
 # Host: VPS1 cv8108817.novalocal; Linux 7.0.0-43-generic; x86_64; Intel Xeon Icelake
-# RAM: 978220 KiB total; 605980 KiB available at post-run capture
-# rustc 1.93.1; cargo 1.93.1; Python 3.14.4; SQLite 3.46.1; dd (uutils coreutils) 0.10.0
-# Test command: cd /tmp/opdb-pr85-rust-check && cargo test --release --offline (16 Rust tests passed)
-# Benchmark command: cd /tmp/opdb-pr85-rust-check && cargo run --release --offline --example bench_v0
-# Temp files: /tmp tmpfs; every run checks free bytes; all 1M Rust runs skipped before writes
-# Cold-open cache handling: per-file dd iflag=nocache request; no global page-cache drop
-# Peak RSS: Linux VmHWM, reset via /proc/self/clear_refs for each case; includes keys and oracle
-    Finished `release` profile [optimized] target(s) in 0.02s
+# RAM: 978220 KiB total; 470056 KiB available at post-run capture
+# rustc 1.93.1; cargo 1.93.1; Python 3.14.4; SQLite 3.46.1
+# Rust test command: cd /tmp/opdb-pr85-rust-check && TMPDIR=/opt/opdb-review-87-rust/tmp cargo test --release --offline (16 passed)
+# Rust benchmark command: cd /tmp/opdb-pr85-rust-check && TMPDIR=/opt/opdb-review-87-rust/tmp cargo run --release --offline --example bench_v0
+# Temp directory is on /dev/sda4 ext4, not /tmp tmpfs; free space checked before each case
+# Cold open: posix_fadvise(DONTNEED) for the private file, then mincore; each measured open had 0 resident pages
+# Peak RSS: Linux VmHWM reset per case through /proc/self/clear_refs; includes keys and independent HashMap oracle
+# 1M x 16 B skipped for memory; 1M x 256 B skipped for disk (and also exceeds estimated memory)
+    Finished `release` profile [optimized] target(s) in 0.01s
      Running `target/release/examples/bench_v0`
-os=linux arch=x86_64 temp=/tmp rust=see rustc --version seed=20261123
-RUN n=10000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=2287518 free_bytes=143155200
-  put: total_ms=22.509 sampled_op_us_median=1.458 p95=2.065 p99=4.236
-  cold_open_after_put_ms=12.037 file_bytes=560012 cache_evict=true
-  get_existing_total_ms=3.606
-  get_missing_total_ms=0.755
-  cold_open_after_overwrite_delete_ms=20.197 file_bytes=1320012 cache_evict=true peak_rss_kib=Some(12592) peak_rss_reset=true
+os=linux arch=x86_64 temp=/opt/opdb-review-87-rust/tmp rust=see rustc --version seed=20261123
+RUN n=10000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=2287518 free_bytes=1012219904 estimated_memory_bytes=26000000 available_memory_bytes=Some(539824128)
+  put: total_ms=18.965 sampled_op_us_median=1.450 p95=2.052 p99=3.953
+  cold_open_after_put_ms=8.815 file_bytes=560012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=2.112
+  get_missing_total_ms=0.410
+  cold_open_after_overwrite_delete_ms=22.061 file_bytes=1320012 resident_pages_before_open=Some(0) peak_rss_kib=Some(12624) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=10000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=2287518 free_bytes=143155200
-  put: total_ms=18.194 sampled_op_us_median=1.210 p95=1.723 p99=3.251
-  cold_open_after_put_ms=8.390 file_bytes=560012 cache_evict=true
-  get_existing_total_ms=2.071
-  get_missing_total_ms=0.435
-  cold_open_after_overwrite_delete_ms=20.044 file_bytes=1320012 cache_evict=true peak_rss_kib=Some(12756) peak_rss_reset=true
+RUN n=10000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=2287518 free_bytes=1012219904 estimated_memory_bytes=26000000 available_memory_bytes=Some(535355392)
+  put: total_ms=18.057 sampled_op_us_median=1.439 p95=2.022 p99=3.945
+  cold_open_after_put_ms=9.408 file_bytes=560012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=1.892
+  get_missing_total_ms=0.476
+  cold_open_after_overwrite_delete_ms=23.363 file_bytes=1320012 resident_pages_before_open=Some(0) peak_rss_kib=Some(12804) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=10000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=2287518 free_bytes=143155200
-  put: total_ms=16.319 sampled_op_us_median=1.266 p95=1.888 p99=3.388
-  cold_open_after_put_ms=8.716 file_bytes=560012 cache_evict=true
-  get_existing_total_ms=2.232
+RUN n=10000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=2287518 free_bytes=1012219904 estimated_memory_bytes=26000000 available_memory_bytes=Some(532103168)
+  put: total_ms=16.280 sampled_op_us_median=1.338 p95=1.827 p99=3.335
+  cold_open_after_put_ms=8.544 file_bytes=560012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=1.937
+  get_missing_total_ms=0.456
+  cold_open_after_overwrite_delete_ms=21.323 file_bytes=1320012 resident_pages_before_open=Some(0) peak_rss_kib=Some(12824) peak_rss_reset=true
+RESULT PASS correctness checked after put, overwrite/delete, close/reopen
+RUN n=10000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=11287518 free_bytes=1012211712 estimated_memory_bytes=32000000 available_memory_bytes=Some(530243584)
+  put: total_ms=47.668 sampled_op_us_median=3.888 p95=5.879 p99=10.402
+  cold_open_after_put_ms=38.405 file_bytes=2960012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=3.241
   get_missing_total_ms=0.502
-  cold_open_after_overwrite_delete_ms=20.461 file_bytes=1320012 cache_evict=true peak_rss_kib=Some(12756) peak_rss_reset=true
+  cold_open_after_overwrite_delete_ms=79.577 file_bytes=6120012 resident_pages_before_open=Some(0) peak_rss_kib=Some(29020) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=10000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=11287518 free_bytes=143155200
-  put: total_ms=46.553 sampled_op_us_median=4.020 p95=6.252 p99=11.578
-  cold_open_after_put_ms=38.588 file_bytes=2960012 cache_evict=true
-  get_existing_total_ms=3.636
-  get_missing_total_ms=0.556
-  cold_open_after_overwrite_delete_ms=81.893 file_bytes=6120012 cache_evict=true peak_rss_kib=Some(28988) peak_rss_reset=true
+RUN n=10000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=11287518 free_bytes=1012211712 estimated_memory_bytes=32000000 available_memory_bytes=Some(516907008)
+  put: total_ms=45.273 sampled_op_us_median=3.852 p95=5.839 p99=9.910
+  cold_open_after_put_ms=36.700 file_bytes=2960012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=2.529
+  get_missing_total_ms=0.432
+  cold_open_after_overwrite_delete_ms=79.032 file_bytes=6120012 resident_pages_before_open=Some(0) peak_rss_kib=Some(29832) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=10000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=11287518 free_bytes=143155200
-  put: total_ms=44.098 sampled_op_us_median=3.806 p95=5.321 p99=9.758
-  cold_open_after_put_ms=35.955 file_bytes=2960012 cache_evict=true
-  get_existing_total_ms=3.988
-  get_missing_total_ms=0.710
-  cold_open_after_overwrite_delete_ms=73.965 file_bytes=6120012 cache_evict=true peak_rss_kib=Some(29784) peak_rss_reset=true
+RUN n=10000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=11287518 free_bytes=1012211712 estimated_memory_bytes=32000000 available_memory_bytes=Some(505413632)
+  put: total_ms=44.520 sampled_op_us_median=3.866 p95=5.793 p99=9.550
+  cold_open_after_put_ms=37.050 file_bytes=2960012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=2.869
+  get_missing_total_ms=0.538
+  cold_open_after_overwrite_delete_ms=73.538 file_bytes=6120012 resident_pages_before_open=Some(0) peak_rss_kib=Some(29832) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=10000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=11287518 free_bytes=143155200
-  put: total_ms=43.523 sampled_op_us_median=3.723 p95=5.339 p99=9.362
-  cold_open_after_put_ms=36.833 file_bytes=2960012 cache_evict=true
-  get_existing_total_ms=2.895
-  get_missing_total_ms=0.520
-  cold_open_after_overwrite_delete_ms=74.700 file_bytes=6120012 cache_evict=true peak_rss_kib=Some(29784) peak_rss_reset=true
+RUN n=100000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=22875018 free_bytes=1012207616 estimated_memory_bytes=260000000 available_memory_bytes=Some(505446400)
+  put: total_ms=185.026 sampled_op_us_median=1.423 p95=2.076 p99=3.666
+  cold_open_after_put_ms=102.826 file_bytes=5600012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=32.577
+  get_missing_total_ms=6.780
+  cold_open_after_overwrite_delete_ms=242.503 file_bytes=13200012 resident_pages_before_open=Some(0) peak_rss_kib=Some(97340) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=100000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=22875018 free_bytes=143155200
-  put: total_ms=178.800 sampled_op_us_median=1.353 p95=2.026 p99=3.178
-  cold_open_after_put_ms=105.525 file_bytes=5600012 cache_evict=true
-  get_existing_total_ms=32.499
-  get_missing_total_ms=7.124
-  cold_open_after_overwrite_delete_ms=210.702 file_bytes=13200012 cache_evict=true peak_rss_kib=Some(97304) peak_rss_reset=true
+RUN n=100000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=22875018 free_bytes=1012273152 estimated_memory_bytes=260000000 available_memory_bytes=Some(481427456)
+  put: total_ms=189.610 sampled_op_us_median=1.427 p95=2.006 p99=3.588
+  cold_open_after_put_ms=87.952 file_bytes=5600012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=31.313
+  get_missing_total_ms=7.856
+  cold_open_after_overwrite_delete_ms=215.531 file_bytes=13200012 resident_pages_before_open=Some(0) peak_rss_kib=Some(97560) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=100000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=22875018 free_bytes=143155200
-  put: total_ms=159.037 sampled_op_us_median=1.271 p95=1.780 p99=2.870
-  cold_open_after_put_ms=84.237 file_bytes=5600012 cache_evict=true
-  get_existing_total_ms=34.694
-  get_missing_total_ms=6.525
-  cold_open_after_overwrite_delete_ms=207.720 file_bytes=13200012 cache_evict=true peak_rss_kib=Some(97508) peak_rss_reset=true
+RUN n=100000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=22875018 free_bytes=1012273152 estimated_memory_bytes=260000000 available_memory_bytes=Some(441266176)
+  put: total_ms=410.727 sampled_op_us_median=1.522 p95=2.341 p99=4.627
+  cold_open_after_put_ms=181.589 file_bytes=5600012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=69.108
+  get_missing_total_ms=15.554
+  cold_open_after_overwrite_delete_ms=191.732 file_bytes=13200012 resident_pages_before_open=Some(0) peak_rss_kib=Some(97908) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=100000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=22875018 free_bytes=143155200
-  put: total_ms=163.668 sampled_op_us_median=1.269 p95=1.838 p99=2.989
-  cold_open_after_put_ms=78.935 file_bytes=5600012 cache_evict=true
-  get_existing_total_ms=30.441
-  get_missing_total_ms=6.890
-  cold_open_after_overwrite_delete_ms=234.144 file_bytes=13200012 cache_evict=true peak_rss_kib=Some(97508) peak_rss_reset=true
+RUN n=100000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=112875018 free_bytes=1012256768 estimated_memory_bytes=320000000 available_memory_bytes=Some(458596352)
+  put: total_ms=490.008 sampled_op_us_median=4.020 p95=5.985 p99=10.509
+  cold_open_after_put_ms=450.002 file_bytes=29600012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=45.061
+  get_missing_total_ms=9.053
+  cold_open_after_overwrite_delete_ms=824.448 file_bytes=61200012 resident_pages_before_open=Some(0) peak_rss_kib=Some(261376) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=100000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=112875018 free_bytes=143155200
-  put: total_ms=491.079 sampled_op_us_median=4.010 p95=6.178 p99=12.391
-  cold_open_after_put_ms=402.095 file_bytes=29600012 cache_evict=true
-  get_existing_total_ms=42.514
-  get_missing_total_ms=6.993
-  cold_open_after_overwrite_delete_ms=777.946 file_bytes=61200012 cache_evict=true peak_rss_kib=Some(261344) peak_rss_reset=true
+RUN n=100000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=112875018 free_bytes=1012252672 estimated_memory_bytes=320000000 available_memory_bytes=Some(366501888)
+  put: total_ms=467.234 sampled_op_us_median=3.982 p95=5.773 p99=9.478
+  cold_open_after_put_ms=350.611 file_bytes=29600012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=34.535
+  get_missing_total_ms=6.819
+  cold_open_after_overwrite_delete_ms=870.741 file_bytes=61200012 resident_pages_before_open=Some(0) peak_rss_kib=Some(270708) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=100000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=112875018 free_bytes=143155200
-  put: total_ms=452.392 sampled_op_us_median=3.900 p95=5.415 p99=8.809
-  cold_open_after_put_ms=354.045 file_bytes=29600012 cache_evict=true
-  get_existing_total_ms=36.370
-  get_missing_total_ms=7.135
-  cold_open_after_overwrite_delete_ms=1031.560 file_bytes=61200012 cache_evict=true peak_rss_kib=Some(270676) peak_rss_reset=true
+RUN n=100000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=112875018 free_bytes=1012248576 estimated_memory_bytes=320000000 available_memory_bytes=Some(359714816)
+  put: total_ms=478.512 sampled_op_us_median=4.053 p95=6.318 p99=11.517
+  cold_open_after_put_ms=377.193 file_bytes=29600012 resident_pages_before_open=Some(0)
+  get_existing_total_ms=35.035
+  get_missing_total_ms=6.901
+  cold_open_after_overwrite_delete_ms=877.964 file_bytes=61200012 resident_pages_before_open=Some(0) peak_rss_kib=Some(277736) peak_rss_reset=true
 RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=100000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=112875018 free_bytes=143155200
-  put: total_ms=761.079 sampled_op_us_median=3.904 p95=5.406 p99=10.494
-  cold_open_after_put_ms=568.610 file_bytes=29600012 cache_evict=true
-  get_existing_total_ms=38.034
-  get_missing_total_ms=7.021
-  cold_open_after_overwrite_delete_ms=746.364 file_bytes=61200012 cache_evict=true peak_rss_kib=Some(270792) peak_rss_reset=true
-RESULT PASS correctness checked after put, overwrite/delete, close/reopen
-RUN n=1000000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=228750018 free_bytes=143155200
+RUN n=1000000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=228750018 free_bytes=1012330496 estimated_memory_bytes=2600000000 available_memory_bytes=Some(359366656)
+RESULT SKIPPED_INSUFFICIENT_MEMORY
+RUN n=1000000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=228750018 free_bytes=1012330496 estimated_memory_bytes=2600000000 available_memory_bytes=Some(359256064)
+RESULT SKIPPED_INSUFFICIENT_MEMORY
+RUN n=1000000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=228750018 free_bytes=1012330496 estimated_memory_bytes=2600000000 available_memory_bytes=Some(359256064)
+RESULT SKIPPED_INSUFFICIENT_MEMORY
+RUN n=1000000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=1012330496 estimated_memory_bytes=3200000000 available_memory_bytes=Some(359256064)
 RESULT SKIPPED_INSUFFICIENT_DISK
-RUN n=1000000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=228750018 free_bytes=143155200
+RUN n=1000000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=1012326400 estimated_memory_bytes=3200000000 available_memory_bytes=Some(359256064)
 RESULT SKIPPED_INSUFFICIENT_DISK
-RUN n=1000000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=228750018 free_bytes=143155200
-RESULT SKIPPED_INSUFFICIENT_DISK
-RUN n=1000000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=143155200
-RESULT SKIPPED_INSUFFICIENT_DISK
-RUN n=1000000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=143155200
-RESULT SKIPPED_INSUFFICIENT_DISK
-RUN n=1000000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=143155200
+RUN n=1000000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=1128750018 free_bytes=1012326400 estimated_memory_bytes=3200000000 available_memory_bytes=Some(359256064)
 RESULT SKIPPED_INSUFFICIENT_DISK
