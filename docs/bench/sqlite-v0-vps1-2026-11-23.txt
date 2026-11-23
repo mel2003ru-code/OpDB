@@ -1,103 +1,31 @@
-# Measured source SHA: e9bbefccf421253175667c72fd78d67a0ae86097 (TASK-021 benchmark code and scripts)
+# Measured source SHA: 5cc03bcc5f52a51c9334c3a4276eb27cab8041f6 (TASK-021 benchmark code and scripts)
 # Same VPS1/Linux/ext4/x86_64/Xeon Icelake and Python 3.14.4 / SQLite 3.46.1 as Rust log
 # Command: TMPDIR=/opt/opdb-review-87-rust/tmp python3 /opt/opdb-review-87-rust/bench_sqlite_kv.py --sizes 10000,100000 --value-sizes 16,256 --repeats 3
-# Temp directory is on /dev/sda4 ext4; each case uses a fresh TemporaryDirectory with disk and memory guards
-# SQLite config per run: journal_mode=delete, synchronous=FULL (2), one transaction per write phase
-# Peak RSS: Linux VmHWM reset per case through /proc/self/clear_refs; includes dict oracle
+# Temp directory: /opt/opdb-review-87-rust/tmp on /dev/sda4 ext4; fresh TemporaryDirectory per case
+# SQLite: journal_mode=delete, synchronous=FULL (2), one transaction per write phase
+# Peak RSS: Linux VmHWM reset per case with /proc/self/clear_refs; includes dict oracle
 python=3.14.4 sqlite=3.46.1 seed=20261123
-RUN n=10000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=2287518 free_bytes=1012293632 estimated_memory_bytes=26000000 available_memory_bytes=546459648
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=55.242 file_bytes=913408
-  get_existing_total_ms=101.220
-  get_missing_total_ms=107.774
-  overwrite_total_ms=56.128 delete_total_ms=19.160 after_overwrite_delete_file_bytes=925696 peak_rss_kib=21736
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=10000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=2287518 free_bytes=1012293632 estimated_memory_bytes=26000000 available_memory_bytes=547008512
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=40.144 file_bytes=913408
-  get_existing_total_ms=91.327
-  get_missing_total_ms=85.112
-  overwrite_total_ms=45.678 delete_total_ms=19.829 after_overwrite_delete_file_bytes=925696 peak_rss_kib=23196
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=10000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=2287518 free_bytes=1012293632 estimated_memory_bytes=26000000 available_memory_bytes=547078144
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=39.474 file_bytes=913408
-  get_existing_total_ms=85.970
-  get_missing_total_ms=92.165
-  overwrite_total_ms=48.202 delete_total_ms=23.662 after_overwrite_delete_file_bytes=925696 peak_rss_kib=24116
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=10000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=11287518 free_bytes=1012293632 estimated_memory_bytes=32000000 available_memory_bytes=547139584
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=52.427 file_bytes=3559424
-  get_existing_total_ms=93.472
-  get_missing_total_ms=94.432
-  overwrite_total_ms=73.119 delete_total_ms=36.760 after_overwrite_delete_file_bytes=3567616 peak_rss_kib=29104
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=10000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=11287518 free_bytes=1012293632 estimated_memory_bytes=32000000 available_memory_bytes=545349632
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=51.222 file_bytes=3559424
-  get_existing_total_ms=101.544
-  get_missing_total_ms=81.712
-  overwrite_total_ms=78.197 delete_total_ms=40.161 after_overwrite_delete_file_bytes=3567616 peak_rss_kib=32248
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=10000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=11287518 free_bytes=1012285440 estimated_memory_bytes=32000000 available_memory_bytes=542031872
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=45.525 file_bytes=3559424
-  get_existing_total_ms=87.659
-  get_missing_total_ms=95.155
-  overwrite_total_ms=74.884 delete_total_ms=31.387 after_overwrite_delete_file_bytes=3567616 peak_rss_kib=32148
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=100000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=22875018 free_bytes=1012277248 estimated_memory_bytes=260000000 available_memory_bytes=542130176
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=546.373 file_bytes=9269248
-  get_existing_total_ms=1195.958
-  get_missing_total_ms=987.447
-  overwrite_total_ms=734.824 delete_total_ms=331.104 after_overwrite_delete_file_bytes=9318400 peak_rss_kib=54296
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=100000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=22875018 free_bytes=1012260864 estimated_memory_bytes=260000000 available_memory_bytes=504020992
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=490.599 file_bytes=9269248
-  get_existing_total_ms=991.378
-  get_missing_total_ms=1004.795
-  overwrite_total_ms=790.074 delete_total_ms=304.495 after_overwrite_delete_file_bytes=9318400 peak_rss_kib=62960
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=100000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=22875018 free_bytes=1012273152 estimated_memory_bytes=260000000 available_memory_bytes=441856000
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=960.187 file_bytes=9269248
-  get_existing_total_ms=1184.544
-  get_missing_total_ms=2000.192
-  overwrite_total_ms=1113.692 delete_total_ms=298.984 after_overwrite_delete_file_bytes=9318400 peak_rss_kib=66412
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=100000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=112875018 free_bytes=1012228096 estimated_memory_bytes=320000000 available_memory_bytes=517873664
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=574.199 file_bytes=35610624
-  get_existing_total_ms=944.747
-  get_missing_total_ms=920.037
-  overwrite_total_ms=975.438 delete_total_ms=437.406 after_overwrite_delete_file_bytes=35647488 peak_rss_kib=114732
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=100000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=112875018 free_bytes=1012260864 estimated_memory_bytes=320000000 available_memory_bytes=433795072
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=570.490 file_bytes=35610624
-  get_existing_total_ms=1034.165
-  get_missing_total_ms=993.621
-  overwrite_total_ms=1040.720 delete_total_ms=586.533 after_overwrite_delete_file_bytes=35647488 peak_rss_kib=141432
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
-RUN n=100000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=112875018 free_bytes=1012252672 estimated_memory_bytes=320000000 available_memory_bytes=430374912
-  peak_rss_reset=True
-  sqlite_journal_mode=delete synchronous=2 (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase
-  put_total_ms=580.892 file_bytes=35610624
-  get_existing_total_ms=1108.873
-  get_missing_total_ms=1290.173
-  overwrite_total_ms=1034.497 delete_total_ms=529.958 after_overwrite_delete_file_bytes=35647488 peak_rss_kib=140840
-RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put
+RUN n=10000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=2287518 free_bytes=995905536 estimated_memory_bytes=26000000 available_memory_bytes=587472896
+RESULT PASS n=10000 value_bytes=16 repeat=1 seed=20261123 put_total_ms=38.991 put_file_bytes=913408 get_existing_total_ms=96.933 get_missing_total_ms=80.626 overwrite_total_ms=43.148 delete_total_ms=18.496 final_file_bytes=925696 peak_rss_kib=21716 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=10000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=2287518 free_bytes=995905536 estimated_memory_bytes=26000000 available_memory_bytes=587526144
+RESULT PASS n=10000 value_bytes=16 repeat=2 seed=20261123 put_total_ms=32.946 put_file_bytes=913408 get_existing_total_ms=77.950 get_missing_total_ms=108.852 overwrite_total_ms=83.378 delete_total_ms=44.784 final_file_bytes=925696 peak_rss_kib=23152 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=10000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=2287518 free_bytes=995905536 estimated_memory_bytes=26000000 available_memory_bytes=587579392
+RESULT PASS n=10000 value_bytes=16 repeat=3 seed=20261123 put_total_ms=71.600 put_file_bytes=913408 get_existing_total_ms=158.602 get_missing_total_ms=172.042 overwrite_total_ms=83.726 delete_total_ms=41.507 final_file_bytes=925696 peak_rss_kib=24120 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=10000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=11287518 free_bytes=995905536 estimated_memory_bytes=32000000 available_memory_bytes=587661312
+RESULT PASS n=10000 value_bytes=256 repeat=1 seed=20261123 put_total_ms=84.877 put_file_bytes=3559424 get_existing_total_ms=144.306 get_missing_total_ms=158.603 overwrite_total_ms=62.129 delete_total_ms=30.035 final_file_bytes=3567616 peak_rss_kib=29076 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=10000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=11287518 free_bytes=995897344 estimated_memory_bytes=32000000 available_memory_bytes=591618048
+RESULT PASS n=10000 value_bytes=256 repeat=2 seed=20261123 put_total_ms=43.586 put_file_bytes=3559424 get_existing_total_ms=171.700 get_missing_total_ms=179.409 overwrite_total_ms=116.147 delete_total_ms=64.981 final_file_bytes=3567616 peak_rss_kib=32252 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=10000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=11287518 free_bytes=995893248 estimated_memory_bytes=32000000 available_memory_bytes=591687680
+RESULT PASS n=10000 value_bytes=256 repeat=3 seed=20261123 put_total_ms=87.323 put_file_bytes=3559424 get_existing_total_ms=158.659 get_missing_total_ms=165.467 overwrite_total_ms=65.090 delete_total_ms=36.193 final_file_bytes=3567616 peak_rss_kib=32228 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=100000 value_bytes=16 repeat=1 seed=20261123 estimated_peak_bytes=22875018 free_bytes=995893248 estimated_memory_bytes=260000000 available_memory_bytes=598261760
+RESULT PASS n=100000 value_bytes=16 repeat=1 seed=20261123 put_total_ms=873.862 put_file_bytes=9269248 get_existing_total_ms=1234.727 get_missing_total_ms=2054.859 overwrite_total_ms=1530.875 delete_total_ms=643.748 final_file_bytes=9318400 peak_rss_kib=54268 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=100000 value_bytes=16 repeat=2 seed=20261123 estimated_peak_bytes=22875018 free_bytes=995893248 estimated_memory_bytes=260000000 available_memory_bytes=561504256
+RESULT PASS n=100000 value_bytes=16 repeat=2 seed=20261123 put_total_ms=1023.950 put_file_bytes=9269248 get_existing_total_ms=1209.723 get_missing_total_ms=1976.669 overwrite_total_ms=982.970 delete_total_ms=677.031 final_file_bytes=9318400 peak_rss_kib=63920 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=100000 value_bytes=16 repeat=3 seed=20261123 estimated_peak_bytes=22875018 free_bytes=995905536 estimated_memory_bytes=260000000 available_memory_bytes=512188416
+RESULT PASS n=100000 value_bytes=16 repeat=3 seed=20261123 put_total_ms=1113.004 put_file_bytes=9269248 get_existing_total_ms=1960.854 get_missing_total_ms=1947.553 overwrite_total_ms=1433.157 delete_total_ms=512.594 final_file_bytes=9318400 peak_rss_kib=66416 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=100000 value_bytes=256 repeat=1 seed=20261123 estimated_peak_bytes=112875018 free_bytes=995848192 estimated_memory_bytes=320000000 available_memory_bytes=543739904
+RESULT PASS n=100000 value_bytes=256 repeat=1 seed=20261123 put_total_ms=1168.907 put_file_bytes=35610624 get_existing_total_ms=1654.576 get_missing_total_ms=1409.496 overwrite_total_ms=1397.030 delete_total_ms=804.484 final_file_bytes=35647488 peak_rss_kib=109444 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=100000 value_bytes=256 repeat=2 seed=20261123 estimated_peak_bytes=112875018 free_bytes=995848192 estimated_memory_bytes=320000000 available_memory_bytes=527093760
+RESULT PASS n=100000 value_bytes=256 repeat=2 seed=20261123 put_total_ms=926.902 put_file_bytes=35610624 get_existing_total_ms=1717.708 get_missing_total_ms=1573.907 overwrite_total_ms=1726.382 delete_total_ms=770.530 final_file_bytes=35647488 peak_rss_kib=136144 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict
+RUN n=100000 value_bytes=256 repeat=3 seed=20261123 estimated_peak_bytes=112875018 free_bytes=995762176 estimated_memory_bytes=320000000 available_memory_bytes=498618368
+RESULT PASS n=100000 value_bytes=256 repeat=3 seed=20261123 put_total_ms=924.197 put_file_bytes=35610624 get_existing_total_ms=2008.228 get_missing_total_ms=1779.181 overwrite_total_ms=1979.503 delete_total_ms=708.714 final_file_bytes=35647488 peak_rss_kib=135568 peak_rss_reset=True journal_mode=delete synchronous=2 sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict

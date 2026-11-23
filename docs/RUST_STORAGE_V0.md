@@ -13,7 +13,7 @@ It does not touch or call the Python engine in `opdb/`.
 
 ## TASK-021 measurements (experimental, one VPS)
 
-Measured source SHA: `e9bbefccf421253175667c72fd78d67a0ae86097`. Host: VPS1,
+Measured source SHA: `5cc03bcc5f52a51c9334c3a4276eb27cab8041f6`. Host: VPS1,
 Linux 7.0.0-43-generic, x86_64, Intel Xeon Icelake, 978220 KiB RAM. Toolchain:
 rustc/cargo 1.93.1, Python 3.14.4, SQLite 3.46.1. Each row is the median of
 three runs; raw per-run values and versions are in the two files under
@@ -23,20 +23,20 @@ Rust v0 results (times for N operations unless identified as sampled per-op):
 
 | N | Value B | put total ms | sampled put p50/p95/p99 µs | get existing/missing ms | cold open after put/final ms | final file MB | peak RSS KiB |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 16 | 18.057 | 1.439 / 2.022 / 3.945 | 1.937 / 0.456 | 8.815 / 22.061 | 1.320 | 12,804 |
-| 10,000 | 256 | 45.273 | 3.866 / 5.839 / 9.910 | 2.869 / 0.502 | 37.050 / 79.032 | 6.120 | 29,832 |
-| 100,000 | 16 | 189.610 | 1.427 / 2.076 / 3.666 | 32.577 / 7.856 | 102.826 / 215.531 | 13.200 | 97,560 |
-| 100,000 | 256 | 478.512 | 4.020 / 5.985 / 10.509 | 35.035 / 6.901 | 377.193 / 870.741 | 61.200 | 270,708 |
+| 10,000 | 16 | 20.310 | 1.419 / 2.208 / 4.895 | 2.488 / 0.806 | 9.704 / 23.732 | 1.320 | 12,800 |
+| 10,000 | 256 | 48.937 | 4.187 / 6.581 / 12.867 | 3.703 / 0.599 | 43.954 / 82.449 | 6.120 | 29,828 |
+| 100,000 | 16 | 217.363 | 1.429 / 2.129 / 3.760 | 35.962 / 7.518 | 104.470 / 404.003 | 13.200 | 97,556 |
+| 100,000 | 256 | 633.901 | 4.000 / 5.864 / 10.325 | 52.179 / 15.420 | 704.200 / 1,379.644 | 61.200 | 270,644 |
 
 SQLite results on the **same VPS**, using the same seed, keys, order and
 independent Python dict oracle:
 
 | N | Value B | put ms | get existing/missing ms | overwrite/delete ms | final file MB | peak RSS KiB |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 16 | 40.144 | 91.327 / 92.165 | 48.202 / 19.829 | 0.926 | 23,196 |
-| 10,000 | 256 | 51.222 | 93.472 / 94.432 | 74.884 / 36.760 | 3.568 | 32,148 |
-| 100,000 | 16 | 546.373 | 1,184.544 / 1,004.795 | 790.074 / 304.495 | 9.318 | 62,960 |
-| 100,000 | 256 | 574.199 | 1,034.165 / 993.621 | 1,034.497 / 529.958 | 35.647 | 140,840 |
+| 10,000 | 16 | 38.991 | 96.933 / 108.852 | 83.378 / 41.507 | 0.926 | 23,152 |
+| 10,000 | 256 | 84.877 | 158.659 / 165.467 | 65.090 / 36.193 | 3.568 | 32,228 |
+| 100,000 | 16 | 1,023.950 | 1,234.727 / 1,976.669 | 1,433.157 / 643.748 | 9.318 | 63,920 |
+| 100,000 | 256 | 926.902 | 1,717.708 / 1,573.907 | 1,726.382 / 770.530 | 35.647 | 135,568 |
 
 This is a workload record, not a general speed claim. Rust `put` does not sync
 each call; `close` calls `sync_all`. SQLite uses `journal_mode=delete`,
@@ -53,7 +53,7 @@ not just the store.
 All Rust and SQLite 10k/100k cases completed three times. Rust 1M x 16 B was
 skipped before writes because the estimated RAM need was 2.6 GB with about
 359 MB available. Rust 1M x 256 B was skipped because estimated disk need was
-1.13 GB with about 1.01 GB free; estimated RAM need was 3.2 GB. Thus 1M behavior
+1.13 GB with about 996 MB free; estimated RAM need was 3.2 GB. Thus 1M behavior
 remains unmeasured. Results do not use production files or change the
 experimental store format.
 
