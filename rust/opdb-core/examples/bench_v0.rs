@@ -128,11 +128,11 @@ fn percentile(sorted: &[u128], p: usize) -> u128 {
 
 fn sample_stride(n: usize) -> usize { (n / 100_000).max(1) }
 
-fn stats(label: &str, times: &mut [u128], elapsed: u128) {
+fn stats(times: &mut [u128]) -> (f64, f64, f64) {
     times.sort_unstable();
-    println!("  {label}: total_ms={:.3} sampled_op_us_median={:.3} p95={:.3} p99={:.3}",
-        elapsed as f64 / 1e6, times[times.len()/2] as f64 / 1e3,
-        percentile(times,95) as f64 / 1e3, percentile(times,99) as f64 / 1e3);
+    (times[times.len()/2] as f64 / 1e3,
+     percentile(times,95) as f64 / 1e3,
+     percentile(times,99) as f64 / 1e3)
 }
 
 fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
@@ -173,29 +173,28 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     let put_elapsed = start.elapsed().as_nanos();
     for &i in &order { model.insert(keys[i].clone(), values[i].clone()); }
     sample_peak_rss();
-    stats("put", &mut samples, put_elapsed);
+    let (put_p50_us, put_p95_us, put_p99_us) = stats(&mut samples);
     verify(&store, &model, &keys);
     store.close().unwrap();
     let size_put = fs::metadata(&path).unwrap().len();
     let put_resident_pages = evict_file_cache_and_count_resident_pages(&path);
-    let put_cold = put_resident_pages == Some(0);
+    let put_open_kind = if put_resident_pages == Some(0) { "cold" } else { "cache_resident_or_unknown" };
     let start = Instant::now();
     let mut store = Store::open(&path).unwrap();
     let open_put = start.elapsed().as_nanos();
     verify(&store, &model, &keys);
     sample_peak_rss();
-    println!("  {}_after_put_ms={:.3} file_bytes={size_put} resident_pages_before_open={put_resident_pages:?}",
-        if put_cold { "cold_open" } else { "replay_open" }, open_put as f64/1e6);
+    let open_put_ms = open_put as f64 / 1e6;
 
     let start = Instant::now();
     for &i in &order {
         assert_eq!(store.get(&keys[i]), Some(values[i].as_slice()));
     }
-    println!("  get_existing_total_ms={:.3}", start.elapsed().as_secs_f64()*1e3);
+    let get_existing_ms = start.elapsed().as_secs_f64()*1e3;
     let missing: Vec<Vec<u8>> = (n..2*n).map(key).collect();
     let start = Instant::now();
     for k in &missing { assert_eq!(store.get(k), None); }
-    println!("  get_missing_total_ms={:.3}", start.elapsed().as_secs_f64()*1e3);
+    let get_missing_ms = start.elapsed().as_secs_f64()*1e3;
 
     for &i in &order {
         let v = &overwrite_values[i];
@@ -212,17 +211,17 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     store.close().unwrap();
     let size_after = fs::metadata(&path).unwrap().len();
     let final_resident_pages = evict_file_cache_and_count_resident_pages(&path);
-    let final_cold = final_resident_pages == Some(0);
+    let final_open_kind = if final_resident_pages == Some(0) { "cold" } else { "cache_resident_or_unknown" };
     let start = Instant::now();
     let store = Store::open(&path).unwrap();
+    let cold_final_ms = start.elapsed().as_secs_f64()*1e3;
     sample_peak_rss();
-    println!("  {}_after_overwrite_delete_ms={:.3} file_bytes={size_after} resident_pages_before_open={final_resident_pages:?} peak_rss_kib={:?} peak_rss_reset={rss_reset}",
-        if final_cold { "cold_open" } else { "replay_open" }, start.elapsed().as_secs_f64()*1e3,
-        (PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed) != 0)
-            .then(|| PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed)));
+    let peak_rss = (PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed) != 0)
+        .then(|| PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed));
     verify(&store, &model, &keys);
     drop(store);
-    println!("RESULT PASS correctness checked after put, overwrite/delete, close/reopen");
+    let put_total_ms = put_elapsed as f64 / 1e6;
+    println!("RESULT PASS n={n} value_bytes={vsize} repeat={repeat} seed={SEED} put_total_ms={put_total_ms:.3} put_sample_p50_us={put_p50_us:.3} put_sample_p95_us={put_p95_us:.3} put_sample_p99_us={put_p99_us:.3} get_existing_total_ms={get_existing_ms:.3} get_missing_total_ms={get_missing_ms:.3} put_open_kind={put_open_kind} open_after_put_ms={open_put_ms:.3} put_file_bytes={size_put} put_resident_pages={put_resident_pages:?} final_open_kind={final_open_kind} open_after_overwrite_delete_ms={cold_final_ms:.3} final_file_bytes={size_after} final_resident_pages={final_resident_pages:?} peak_rss_kib={peak_rss:?} peak_rss_reset={rss_reset} oracle=HashMap");
 }
 
 pub(crate) fn verify(store: &Store, model: &std::collections::HashMap<Vec<u8>,Vec<u8>>, keys: &[Vec<u8>]) {

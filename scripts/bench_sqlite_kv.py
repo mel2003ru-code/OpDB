@@ -89,7 +89,6 @@ def main():
                 if available is None and n > 100_000:
                     print("RESULT SKIPPED_MEMORY_UNKNOWN"); continue
                 rss_reset = reset_peak_rss()
-                print(f"  peak_rss_reset={rss_reset}")
                 with tempfile.TemporaryDirectory(prefix="opdb-sqlite-bench-") as directory:
                     db = Path(directory)/"kv.sqlite3"
                     conn = sqlite3.connect(db)
@@ -100,15 +99,14 @@ def main():
                     values = [value(i,size) for i in range(n)]
                     expected = {}
                     peak_rss = peak_rss_kib()
-                    print(f"  sqlite_journal_mode={journal} synchronous={synchronous} (0=OFF,1=NORMAL,2=FULL,3=EXTRA); one transaction per phase")
                     started = time.perf_counter()
                     for i in seq:
                         conn.execute("INSERT OR REPLACE INTO kv VALUES (?,?)",(keys[i],values[i]))
                     conn.commit()
                     put_ms=(time.perf_counter()-started)*1000
+                    size_put=db.stat().st_size
                     expected.update((keys[i],values[i]) for i in seq)
                     peak_rss = max(filter(None, (peak_rss, peak_rss_kib())), default=None)
-                    print(f"  put_total_ms={put_ms:.3f} file_bytes={db.stat().st_size}")
                     def verify():
                         for k in keys:
                             row=conn.execute("SELECT v FROM kv WHERE k=?",(k,)).fetchone()
@@ -118,13 +116,13 @@ def main():
                     for i in seq:
                         row=conn.execute("SELECT v FROM kv WHERE k=?",(keys[i],)).fetchone()
                         if row is None or row[0] != expected[keys[i]]: raise RuntimeError("ORACLE_MISMATCH_GET")
-                    print(f"  get_existing_total_ms={(time.perf_counter()-started)*1000:.3f}")
+                    get_existing_ms=(time.perf_counter()-started)*1000
                     peak_rss = max(filter(None, (peak_rss, peak_rss_kib())), default=None)
                     started=time.perf_counter()
                     for i in range(n,2*n):
                         if conn.execute("SELECT v FROM kv WHERE k=?",(key(i),)).fetchone() is not None:
                             raise RuntimeError("UNEXPECTED_MISSING_KEY")
-                    print(f"  get_missing_total_ms={(time.perf_counter()-started)*1000:.3f}")
+                    get_missing_ms=(time.perf_counter()-started)*1000
                     peak_rss = max(filter(None, (peak_rss, peak_rss_kib())), default=None)
                     overwrite_values=[value(i+n,size) for i in range(n)]
                     started=time.perf_counter()
@@ -143,8 +141,7 @@ def main():
                     size_after=db.stat().st_size
                     conn=sqlite3.connect(db); verify(); conn.close()
                     peak_rss = max(filter(None, (peak_rss, peak_rss_kib())), default=None)
-                    print(f"  overwrite_total_ms={overwrite_ms:.3f} delete_total_ms={delete_ms:.3f} after_overwrite_delete_file_bytes={size_after} peak_rss_kib={peak_rss}")
-                    print("RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put")
+                    print(f"RESULT PASS n={n} value_bytes={size} repeat={repeat} seed={SEED} put_total_ms={put_ms:.3f} put_file_bytes={size_put} get_existing_total_ms={get_existing_ms:.3f} get_missing_total_ms={get_missing_ms:.3f} overwrite_total_ms={overwrite_ms:.3f} delete_total_ms={delete_ms:.3f} final_file_bytes={size_after} peak_rss_kib={peak_rss} peak_rss_reset={rss_reset} journal_mode={journal} synchronous={synchronous} sync_names=OFF,NORMAL,FULL,EXTRA write_transactions=one_per_phase oracle=dict");
 
 
 if __name__=="__main__": main()
