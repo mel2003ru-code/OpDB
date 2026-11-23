@@ -81,13 +81,20 @@ pub(crate) fn order(n: usize) -> Vec<usize> {
     values
 }
 
-fn rss_kib() -> Option<u64> {
+fn peak_rss_kib() -> Option<u64> {
     let text = fs::read_to_string("/proc/self/status").ok()?;
-    text.lines().find(|line| line.starts_with("VmRSS:"))?.split_whitespace().nth(1)?.parse().ok()
+    text.lines().find(|line| line.starts_with("VmHWM:"))?.split_whitespace().nth(1)?.parse().ok()
+}
+
+fn reset_peak_rss() -> bool {
+    #[cfg(target_os = "linux")]
+    { return fs::write("/proc/self/clear_refs", "5\n").is_ok(); }
+    #[cfg(not(target_os = "linux"))]
+    { false }
 }
 
 fn sample_peak_rss() {
-    if let Some(kib)=rss_kib() {
+    if let Some(kib)=peak_rss_kib() {
         PEAK_RSS_KIB.fetch_max(kib, std::sync::atomic::Ordering::Relaxed);
     }
 }
@@ -112,6 +119,7 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
         println!("RESULT SKIPPED_INSUFFICIENT_DISK");
         return;
     }
+    let rss_reset = reset_peak_rss();
     PEAK_RSS_KIB.store(0, std::sync::atomic::Ordering::Relaxed);
     let scratch = Scratch::new();
     let path = scratch.file("rust");
@@ -173,7 +181,7 @@ fn run(n: usize, vsize: usize, repeat: usize, free: u64) {
     let start = Instant::now();
     let store = Store::open(&path).unwrap();
     sample_peak_rss();
-    println!("  {}_after_overwrite_delete_ms={:.3} file_bytes={size_after} cache_evict={final_cache_evicted} peak_rss_kib={:?}",
+    println!("  {}_after_overwrite_delete_ms={:.3} file_bytes={size_after} cache_evict={final_cache_evicted} peak_rss_kib={:?} peak_rss_reset={rss_reset}",
         if final_cache_evicted { "cold_open" } else { "replay_open" }, start.elapsed().as_secs_f64()*1e3,
         (PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed) != 0)
             .then(|| PEAK_RSS_KIB.load(std::sync::atomic::Ordering::Relaxed)));
