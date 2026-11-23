@@ -37,6 +37,16 @@ def estimate(n, size):
     return int(((n*2+n//2)*(13+32+size)+12)*1.5 + .999999)
 
 
+def available_memory_bytes():
+    try:
+        for line in Path('/proc/meminfo').read_text().splitlines():
+            if line.startswith('MemAvailable:'):
+                return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return None
+
+
 def peak_rss_kib():
     try:
         for line in Path('/proc/self/status').read_text().splitlines():
@@ -69,10 +79,17 @@ def main():
             for repeat in range(1, args.repeats+1):
                 need = estimate(n, size)
                 free = shutil.disk_usage(tempfile.gettempdir()).free
-                rss_reset = reset_peak_rss()
-                print(f"RUN n={n} value_bytes={size} repeat={repeat} seed={SEED} estimated_peak_bytes={need} free_bytes={free} peak_rss_reset={rss_reset}")
+                memory_need = n * (size + 1024) * 5 // 2
+                available = available_memory_bytes()
+                print(f"RUN n={n} value_bytes={size} repeat={repeat} seed={SEED} estimated_peak_bytes={need} free_bytes={free} estimated_memory_bytes={memory_need} available_memory_bytes={available}")
                 if free < need:
                     print("RESULT SKIPPED_INSUFFICIENT_DISK"); continue
+                if available is not None and available < memory_need:
+                    print("RESULT SKIPPED_INSUFFICIENT_MEMORY"); continue
+                if available is None and n > 100_000:
+                    print("RESULT SKIPPED_MEMORY_UNKNOWN"); continue
+                rss_reset = reset_peak_rss()
+                print(f"  peak_rss_reset={rss_reset}")
                 with tempfile.TemporaryDirectory(prefix="opdb-sqlite-bench-") as directory:
                     db = Path(directory)/"kv.sqlite3"
                     conn = sqlite3.connect(db)
