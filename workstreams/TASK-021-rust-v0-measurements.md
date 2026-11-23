@@ -32,6 +32,18 @@ can decide on a WAL/compaction/format direction from data.
 4. Raw output committed as `docs/bench/rust-v0-<date>.txt` (and the SQLite one beside it).
    A short factual section in `docs/RUST_STORAGE_V0.md`: table of results, machine, SHA, commands.
 
+## Reproducibility and resource limits
+
+- Each run uses its own temporary directory, created fresh and removed afterwards; no production
+  or repository files are touched. Before a run the harness checks free disk space and refuses to start
+  if the estimated need (append-only log after put + overwrite + delete, times 1.5) does not fit; it prints
+  the estimate. The 1,000,000 x 256 B size is skipped, and reported as skipped, when the space is not available.
+  Peak RSS is recorded for every size.
+- Rust and Python use one specified operation sequence: the same seed, the same key generator and the same
+  order (put N, get all, get missing, overwrite all, delete every second key). The Python oracle
+  generates the sequence independently of the Rust code; expected final contents are compared after
+  put, after overwrite, after delete, and again after close and reopen.
+
 ## Tests that must exist
 
 - Before timing anything, the benchmark verifies every value read back against an independent
