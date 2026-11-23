@@ -125,7 +125,7 @@ def main():
                     peak_rss = max(filter(None, (peak_rss, peak_rss_kib())), default=None)
                     size_after=db.stat().st_size
                     conn=sqlite3.connect(db); verify(); conn.close()
-                    peak_rss = max(filter(None, (peak_rss, current_rss_kib())), default=None)
+                    peak_rss = max(filter(None, (peak_rss, peak_rss_kib())), default=None)
                     print(f"  overwrite_total_ms={overwrite_ms:.3f} delete_total_ms={delete_ms:.3f} after_overwrite_delete_file_bytes={size_after} peak_rss_kib={peak_rss}")
                     print("RESULT PASS independent Python dict checked after every phase and reopen; SQLite uses one transaction per write phase, unlike Rust's unsynced per-call put")
 
