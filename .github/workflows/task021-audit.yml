@@ -1,0 +1,34 @@
+name: TASK-021 independent benchmark audit
+on:
+  pull_request:
+    branches: [task-021-rust-v0-bench]
+permissions:
+  contents: read
+concurrency:
+  group: task021-benchmark-audit
+  cancel-in-progress: false
+jobs:
+  benchmark-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Record environment and exact source
+        run: |
+          git rev-parse HEAD
+          uname -a
+          nproc
+          free -h
+          df -h .
+          rustc --version
+          cargo --version
+          python3 --version
+          python3 -c "import sqlite3; print(sqlite3.sqlite_version)"
+      - name: Run Rust benchmark
+        working-directory: rust/opdb-core
+        run: cargo run --release --offline --example bench_v0
+      - name: Run SQLite benchmark
+        run: python3 scripts/bench_sqlite_kv.py --sizes 10000,100000 --value-sizes 16,256 --repeats 3
