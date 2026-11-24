@@ -9,7 +9,7 @@ import tempfile
 import time
 
 SEED = 2_026_11_23
-SIZES = (10_000, 100_000, 1_000_000)
+SIZES = (10_000, 100_000)  # Routine scope; million-key stress is a separate task.
 VALUE_SIZES = (16, 256)
 
 
@@ -67,7 +67,7 @@ def reset_peak_rss():
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument("--sizes",default="10000,100000,1000000")
+    parser.add_argument("--sizes",default="10000,100000")
     parser.add_argument("--value-sizes",default="16,256")
     parser.add_argument("--repeats",type=int,default=3)
     args=parser.parse_args()

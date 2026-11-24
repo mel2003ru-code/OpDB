@@ -17,7 +17,9 @@ can decide on a WAL/compaction/format direction from data.
 1. A benchmark binary or `cargo test --release -- --ignored` target under
    `rust/opdb-core/` (e.g. `examples/bench_v0.rs`), standard library only,
    deterministic with a fixed seed.
-2. Workloads at 10,000, 100,000 and 1,000,000 keys (values 16 B and 256 B):
+2. **Required** workloads at 10,000 and 100,000 keys (values 16 B and 256 B).
+   A 1,000,000-key workload is **optional future capacity testing**, not an
+   acceptance criterion for TASK-021; do not label a skipped run as measured:
    - bulk `put` of N new keys (total time, per-op median/p95/p99 from sampled timings);
    - `get` of N random existing keys and of N missing keys;
    - overwrite of every key once, then `delete` of half the keys;
@@ -37,8 +39,10 @@ can decide on a WAL/compaction/format direction from data.
 - Each run uses its own temporary directory, created fresh and removed afterwards; no production
   or repository files are touched. Before a run the harness checks free disk space and refuses to start
   if the estimated need (append-only log after put + overwrite + delete, times 1.5) does not fit; it prints
-  the estimate. The 1,000,000 x 256 B size is skipped, and reported as skipped, when the space is not available.
-  Peak RSS is recorded for every size.
+  the estimate. Million-key runs are opt-in future work, not part of the default
+  benchmark or required for this PR. If separately attempted, insufficient RAM,
+  cgroup headroom or disk must cause an explicit SKIP before allocation/writes,
+  not a false PASS or unsafe attempt. Peak RSS is recorded for each measured size.
 - Rust and Python use one specified operation sequence: the same seed, the same key generator and the same
   order (put N, get all, get missing, overwrite all, delete every second key). The Python oracle
   generates the sequence independently of the Rust code; expected final contents are compared after
@@ -54,9 +58,23 @@ can decide on a WAL/compaction/format direction from data.
 ## Measurement and evidence
 
 Publish SHA, `rustc`/`cargo`/Python/SQLite versions, OS/CPU/RAM, exact commands, raw logs,
-and at least 3 repeated runs per size (report each, plus the median). A negative result
+and at least 3 repeated runs per **required** size (10k and 100k, at 16 B and
+256 B; report each run plus the median). Million-key results may be collected
+later with a suitable runner and independently verified limits, but absence or
+resource SKIPs do not block TASK-021; explicitly state that 1M performance is
+unmeasured. A negative result
 (Rust v0 slower, memory-hungry, or file growth large) is a valid outcome and is stated as it is.
 No statement about any other database is made unless it was measured by a script in the repository.
+
+## Owner-approved measurement scope (2026-11-24)
+
+The owner explicitly made million-key performance runs **optional** to avoid
+blocking safe development on the small VPS. This changes measurement coverage
+only: all existing and new Rust/Python correctness tests, independent models,
+regression checks, CI, independent review and publication of reproducible raw
+10k/100k results remain mandatory. Do not claim 1M scalability, durability or
+correctness from smaller benchmarks. Million-key stress and container-aware
+memory preflight are deferred to a separate, resource-appropriate follow-up.
 
 ## Scope limits
 

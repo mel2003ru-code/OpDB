@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const SEED: u64 = 2_026_11_23;
-const SIZES: [usize; 3] = [10_000, 100_000, 1_000_000];
+// Routine measurements stay bounded on VPS1; million-key stress is a separate task.
+const SIZES: [usize; 2] = [10_000, 100_000];
 const VALUE_SIZES: [usize; 2] = [16, 256];
 static PEAK_RSS_KIB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 

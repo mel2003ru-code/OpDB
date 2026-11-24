@@ -56,8 +56,11 @@ All Rust and SQLite 10k/100k cases completed three times. Rust 1M x 16 B was
 skipped before writes because the estimated RAM need was 2.6 GB with about
 359 MB available. Rust 1M x 256 B was skipped because estimated disk need was
 1.13 GB with about 996 MB free; estimated RAM need was 3.2 GB. Thus 1M behavior
-remains unmeasured. Results do not use production files or change the
-experimental store format.
+remains unmeasured. Per the owner's 2026-11-24 decision, million-key stress
+runs are optional follow-up work, not an acceptance requirement for TASK-021;
+routine runs use 10k/100k sizes only. This does not establish million-key
+scalability or relax correctness tests, independent review, or CI. Results do
+not use production files or change the experimental store format.
 
 Exact commands on the measured source:
 
