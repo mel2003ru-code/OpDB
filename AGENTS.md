@@ -14,8 +14,9 @@ For every open, non-draft pull request that implements a backlog task:
 
 1. Wait for CI. If any check is red, leave one comment naming the failing
    check and what to fix. Do not merge.
-2. Review as an independent reviewer who did not write the code:
+2. Verify the exact current HEAD in an isolated checkout. The author may perform this verification; a separate reviewer or another GitHub account's formal APPROVE is not required:
    - check out the branch and run `python -m unittest discover -s tests -p 'test_*.py'`;
+   - for Rust tasks or changes affecting Rust, run ordinary `cargo test --offline` (including parallel regression tests) and all task-required Rust checks;
    - read the diff and confirm the new tests compare results against an
      independent reference (Source recomputation and a plain Python model),
      not against the code under test;
@@ -30,14 +31,15 @@ For every open, non-draft pull request that implements a backlog task:
      `DONE` in `workstreams/BACKLOG.md` in a follow-up commit on `main`.
    - **Request changes** with one comment listing concrete defects. After
      the third rejected round for the same task, mark it `BLOCKED_OWNER`.
-4. Never merge a pull request you wrote in the same run.
-5. If two open pull requests implement the same task, review both, merge
+4. The author may merge their own PR in the same run only after all checks above pass on the exact HEAD, with real test results recorded and all required CI checks green. Missing runners, failed tests, missing evidence or an unresolved correctness defect block merge. Never enable GitHub auto-merge or bypass branch protection. Recheck HEAD before merging.
+5. Periodic independent audits are encouraged but are not a pre-merge gate. Investigate audit findings promptly; unresolved correctness findings still block affected changes.
+6. If two open pull requests implement the same task, review both, merge
    the more complete one and close the other with a comment linking to it.
 
 ### 2. Fix a rejected pull request
 
 If an open task pull request has a change request and no newer commits,
-address it on the same branch. Then stop; the next run reviews it.
+address it on the same branch. Verify the new HEAD under step 1; merge only if all gates pass, otherwise report the blocker.
 
 ### 3. Build the next task
 
@@ -69,7 +71,7 @@ waiting, and any question for the owner. Three to six sentences.
 ## Limits
 
 - At most one open task pull request at a time.
-- No daily limit on the number of merges. Every merge still requires the independent review, successful CI, task acceptance checks, and other safeguards above.
+- No daily limit on the number of merges. Every merge still requires real verification, successful CI, independent reference checks, task acceptance checks, and other safeguards above.
 - A task pull request adds at most about 600 lines, tests included.
 - Standard library only unless the task file says otherwise.
 
