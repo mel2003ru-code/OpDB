@@ -27,6 +27,17 @@ jobs:
           cargo --version
           python3 --version
           python3 -c "import sqlite3; print(sqlite3.sqlite_version)"
+      - name: Checkout audit probe separately
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: audit-source
+          persist-credentials: false
+      - name: Run independent mixed-operation Rust oracle
+        run: |
+          cp audit-source/audit/task021_external_probe.rs rust/opdb-core/tests/task021_external_probe.rs
+          cargo test --offline --manifest-path rust/opdb-core/Cargo.toml --test task021_external_probe
+          rm rust/opdb-core/tests/task021_external_probe.rs
       - name: Run Rust benchmark
         working-directory: rust/opdb-core
         run: cargo run --release --offline --example bench_v0
