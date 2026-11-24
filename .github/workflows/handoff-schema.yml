@@ -24,3 +24,6 @@ jobs:
         run: python scripts/validate_handoff.py workstreams/HANDOFF_TEMPLATE.json
       - name: Run all repository unit tests, including bounded SQLite research probes
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Run Rust core tests
+        working-directory: rust/opdb-core
+        run: cargo test --offline
