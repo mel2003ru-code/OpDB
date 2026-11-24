@@ -5,9 +5,14 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 static NONCE: AtomicU64 = AtomicU64::new(0);
+// A fork before exec can briefly inherit another test's flock descriptor.
+// Match TASK-019: isolate child spawning from other tests holding store locks.
+// The child helper runs in a different process and must not take this guard.
+static RECOVERY_TEST_GUARD: Mutex<()> = Mutex::new(());
 
 struct Scratch(PathBuf);
 
@@ -62,6 +67,7 @@ fn check_map(store: &Store, expected: &HashMap<Vec<u8>, Vec<u8>>, keys: &[Vec<u8
 
 #[test]
 fn every_short_record_cut_preserves_only_complete_prefix() {
+    let _guard = RECOVERY_TEST_GUARD.lock().unwrap();
     let cases: Vec<(u8, Vec<u8>, Vec<u8>)> = vec![
         (1, vec![], vec![]), (1, vec![0, 255], vec![0, 10, 255]),
         (1, b"k".to_vec(), b"v".to_vec()), (2, vec![], vec![]),
@@ -108,6 +114,7 @@ fn every_short_record_cut_preserves_only_complete_prefix() {
 
 #[test]
 fn large_binary_record_selected_cuts_and_mixed_prefixes() {
+    let _guard = RECOVERY_TEST_GUARD.lock().unwrap();
     let keys = vec![vec![], vec![0, 255], b"alpha".to_vec(), b"beta".to_vec()];
     for seed in 0..8u8 {
         let mut expected = HashMap::new();
@@ -159,6 +166,7 @@ fn large_binary_record_selected_cuts_and_mixed_prefixes() {
 
 #[test]
 fn corrupt_complete_records_are_errors_and_damaged_lengths_are_explicit_tails() {
+    let _guard = RECOVERY_TEST_GUARD.lock().unwrap();
     let scratch = Scratch::new();
     let path = scratch.file();
     let valid = record(1, b"a", b"value");
@@ -242,6 +250,7 @@ fn writer_child() {
 #[cfg(target_os = "linux")]
 #[test]
 fn killed_writer_yields_only_the_confirmed_prefix() {
+    let _guard = RECOVERY_TEST_GUARD.lock().unwrap();
     use std::sync::mpsc;
     for stop_at in 0..3 {
         let scratch = Scratch::new();
