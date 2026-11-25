@@ -43,11 +43,12 @@ only, merge only on green checks, nothing else starting the cycle.
 - [x] 4. `TASKS.md` with small tasks and the one-task-one-PR rule
 - [x] 5. CI: drop the duplicate `push` run on `main` (separate PR, needs the `owner-approved` label; PR `ci/drop-duplicate-push-run`)
 - [x] 6. Cycle report (already produced by the executor)
-- [ ] 7. Check one real cycle on VPS1
+- [x] 7. Check one real cycle on VPS1 (2026-11-25 15:54 MSK: executor restarted, cycle finished in about 5 s, `failed_tests: 0`, `open_prs: 1`, `automatic_merge: false`; blocker: open task PR #94 awaits CI/review)
 
 ## Open questions for the owner
 
-- A second agent may exist on VPS2 (the GitHub App was moved from there). Not
-  inspected: out of scope for this stage.
+- VPS2: the docs on VPS1 mention an older agent there (the GitHub App was moved
+  from it). Owner decision: the project lives on one server, VPS2 is not
+  touched or inspected.
 - AGENTS.md allows the author to merge after green checks, while the VPS
   controller is hard-coded to never merge. Which is intended?
