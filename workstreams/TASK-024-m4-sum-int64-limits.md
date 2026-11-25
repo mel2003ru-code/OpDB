@@ -32,6 +32,23 @@ changed.
   engine defect, keep the failing test and describe the defect in the pull request
 text; do not change the engine.
 
+## Notes checked against the engine
+- A group is the part of a key before the first `/`. `numeric_stats(g)` and
+  `numeric_stats_source(g)` take the **group name** (for key `g/a` the group is
+  `g`), never the full key. Use keys of the form `group/name` everywhere.
+- `numeric_stats_source(g)` exists and scans Source; use it as the second answer.
+- Values are 8-byte big-endian signed integers: `x.to_bytes(8, "big", signed=True)`.
+- Open a fresh store file for every scenario, and `close()` every store before
+  the temporary directory is removed (needed on Windows).
+- A sum outside the signed 64-bit range is still answered exactly (Python
+  integers, e.g. `INT64_MAX + 1`) but from Source: do not assert `LENS` for that
+  group. After a later batch brings the sum back into range the answer is exact
+  again. After reopening a file that once overflowed the store may keep serving
+  from Source: compare numbers only, never `served_from`.
+- Build overflow scenarios with two keys in one group (for example
+  `INT64_MAX - 1` and `1`, then raise the second to `2`); a single value
+  `INT64_MAX` or `INT64_MIN` alone in its group is a valid scenario too.
+
 ## Measurement
 None.
 
