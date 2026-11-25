@@ -29,6 +29,17 @@ test-only task: the engine is not changed.
   engine defect, do not change the engine: keep the failing test and describe
   the defect in the pull request text.
 
+## Notes checked against the engine
+- A group is the part of a key before the first `/`. `numeric_stats(g)` and
+  `numeric_stats_source(g)` take the **group name** (for key `g/a` the group is
+  `g`), never the full key. Use keys of the form `group/name` everywhere.
+- `numeric_stats_source(g)` exists and scans Source; use it as the second answer.
+- Values are 8-byte big-endian signed integers: `x.to_bytes(8, "big", signed=True)`.
+- Open a fresh store file for every scenario, and `close()` every store before
+  the temporary directory is removed (needed on Windows).
+- An emptied group answers `count 0, total 0, minimum None, maximum None`.
+  The Lens serves these answers (`served_from == "LENS"`) in every scenario here.
+
 ## Measurement
 None.
 

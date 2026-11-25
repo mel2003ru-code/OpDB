@@ -110,3 +110,9 @@ and restoring that `agent.py` plus a restart of `opdb-executor` reverts it.
 - Model-call budget: 35 of 36 used until 00:00 UTC (03:00 Moscow time).
 - GitHub had an open incident during these runs (App token HTTP 500, PR and merge API 502): a `gh pr merge --delete-branch` during it closed PR #103 instead of merging it, fixed by restoring the branch; merges now go through the REST API with the exact head SHA.
 - Review runs before the sandbox, so a flawed test is rejected by the model before it is ever executed. Running the candidate's tests in the sandbox first and giving the real failures to the author is the next improvement (needs an owner decision).
+
+## Check order changed: sandbox before model review (2026-11-25, evening)
+
+- Order is now: author -> **sandbox** (repository tests plus the candidate files) -> model review -> second sandbox run with the probe -> CI -> merge gate. A failing candidate goes back to the author with the real `FAIL:` output; the review is only spent on candidates whose tests pass. Code: `/opt/opdb-agent/precheck.py` plus one line in `agent.py`; backup `/root/opdb-backups/preprecheck-20261125T1742Z`.
+- TASK-025 was written by hand (PR #107). TASK-023 and TASK-024 are `READY` again; their specs now carry notes verified against the engine (group name is the part before the first `/`; overflow answers come from Source and are exact).
+- Not yet seen in production: a candidate passing precheck and review, and the merge gate acting on a real PR. The first run is expected after the model-call budget resets at 00:00 UTC.
