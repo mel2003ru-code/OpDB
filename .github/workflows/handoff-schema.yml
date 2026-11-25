@@ -1,8 +1,9 @@
 name: Foundry CI — metadata and research tests
 on:
+  # CI runs on pull requests only. `main` requires up-to-date branches, so the
+  # PR run already tested the exact tree that gets merged; a second run on push
+  # only spent Actions minutes.
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 permissions:
   contents: read

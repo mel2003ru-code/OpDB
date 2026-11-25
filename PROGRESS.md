@@ -41,7 +41,7 @@ only, merge only on green checks, nothing else starting the cycle.
 - [x] 2. Single conductor (nothing to disable: no competing scheduler on VPS1)
 - [x] 3. Lock against parallel runs (already present in the executor)
 - [x] 4. `TASKS.md` with small tasks and the one-task-one-PR rule
-- [ ] 5. CI: drop the duplicate `push` run on `main` (separate PR, needs the `owner-approved` label)
+- [x] 5. CI: drop the duplicate `push` run on `main` (separate PR, needs the `owner-approved` label; PR `ci/drop-duplicate-push-run`)
 - [x] 6. Cycle report (already produced by the executor)
 - [ ] 7. Check one real cycle on VPS1
 
