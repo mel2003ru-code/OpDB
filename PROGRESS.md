@@ -87,3 +87,26 @@ All three cycles took TASK-023. `main` stayed at `0eebc9e`. Nothing was merged.
   next tick marks it `blocked_owner`. PR #99 stays open and blocks new tasks
   until it is closed. Calls to models in the last 24 h: 19 of 36, all free.
 - The backoff was shortened once by hand (`next_cycle` set to now) at the owner's request.
+
+## Controller fixes after the first cycles (2026-11-25, all on VPS1, outside the repository)
+
+Each change was made with a backup in `/root/opdb-backups/` (`premerge`, `preroles`, `preraw`, `pretemp`, `pretext`, `prerev`, `prectx`)
+and restoring that `agent.py` plus a restart of `opdb-executor` reverts it.
+
+| Change | Why |
+| --- | --- |
+| Author model: `nemotron-3.5-super-vl` first, then `ultra`, `lightning` (plain-text mode only) | `lightning` and `ultra` never produced a test file |
+| Author protocol: plain text blocks (`=== FILE: path ===` ... `=== END ===`) instead of a file inside tool-call JSON (`author_text.py`) | models looped on imports or broke JSON escaping; with blocks `super-vl` writes complete test files |
+| Raw author replies kept (last 12, `raw-*.json`) | diagnosis; this is how the cause was found |
+| Review prompt: findings only for real defects, no praise | praise in `findings` made the controller reject good code |
+| Reviewer context 15 000 -> about 56 000 chars (author 48 000 -> 56 000) | the reviewer saw one third of `opdb/numeric.py`, invented API facts and contradicted itself |
+| Author temperature 0.7 for file-writing calls | no effect on the failure; harmless, may be reverted |
+
+## State at the end of the day
+
+- `main` = `cad0bd9`. No task PR merged yet: the merge gate (`merge_gate.py`) has never run against a real candidate.
+- TASK-023 and TASK-024: cancelled after three rejected attempts each (PR #99, #102 closed).
+- TASK-025: the spec was wrong (it assumed `apply()` raises when a row of `opdb_nlens_val` is missing; the engine does not). Fixed to a trigger-based failure injection verified by hand. Two of three attempts were spent on the broken spec, the counter must be reset before the next run. Draft PR #104 is still open.
+- Model-call budget: 35 of 36 used until 00:00 UTC (03:00 Moscow time).
+- GitHub had an open incident during these runs (App token HTTP 500, PR and merge API 502): a `gh pr merge --delete-branch` during it closed PR #103 instead of merging it, fixed by restoring the branch; merges now go through the REST API with the exact head SHA.
+- Review runs before the sandbox, so a flawed test is rejected by the model before it is ever executed. Running the candidate's tests in the sandbox first and giving the real failures to the author is the next improvement (needs an owner decision).
