@@ -50,5 +50,40 @@ only, merge only on green checks, nothing else starting the cycle.
 - VPS2: the docs on VPS1 mention an older agent there (the GitHub App was moved
   from it). Owner decision: the project lives on one server, VPS2 is not
   touched or inspected.
-- AGENTS.md allows the author to merge after green checks, while the VPS
-  controller is hard-coded to never merge. Which is intended?
+- Merge policy: decided by the owner on 2026-11-25 (see "Merge gate" below).
+
+## Merge gate (owner decision 2026-11-25)
+
+- VPS1 controller now merges its own task PR (`task-NNN-vps1`) only when, on the
+  exact HEAD: the independent model review approved it, both required checks
+  (`validate-handoff-metadata`, `protected-files`) are green, `unittest` and
+  `cargo test --offline --locked` pass in the isolated sandboxes, no protected
+  path is touched and `main` has not moved. HEAD is re-read right before the
+  merge and passed as `sha`. No GitHub auto-merge, no bypass of branch protection.
+- Code lives outside the repository: `/opt/opdb-agent/merge_gate.py` plus a
+  3-line hook in `agent.py`. Backup before the change:
+  `/root/opdb-backups/premerge-20261125T1304Z`. Switch off without a restart:
+  create `/var/lib/opdb-agent/merge.disabled`. Rollback: restore `agent.py`
+  from the backup, delete `merge_gate.py`, restart `opdb-executor`.
+- `rust_runner.py` now accepts `examples/*.rs`; before that every
+  `cargo test` run on the current `rust/opdb-core` would have been refused.
+- PR #94 (TASK-022) closed, TASK-022 is `BLOCKED_OWNER`; TASK-023..025 are `READY`.
+
+## Three cycles (2026-11-25)
+
+All three cycles took TASK-023. `main` stayed at `0eebc9e`. Nothing was merged.
+
+| # | Time (server) | Task | PR | CI on the PR | Result |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 16:25 | TASK-023, attempt 1 | #99 (draft, reservation only) | `protected-files` pass; `validate-handoff-metadata` running | `independent_candidate_review_rejected`: file of repeated imports, truncated |
+| 2 | 16:41 | TASK-023, attempt 2 | #99 | unchanged | rejected: one line of imports, no tests |
+| 3 | 16:56 | TASK-023, attempt 3 | #99 | unchanged | rejected: repeated `io` imports, placeholder text |
+
+- Cause: the free author model (`nvidia/nemotron-3.5-lightning:free`) degenerates
+  into repetition instead of writing the test file. The independent reviewer
+  caught every attempt, so the review gate works. The merge gate itself was not
+  exercised on a real PR: there was nothing to merge.
+- Controller state after the cycles: TASK-023 has used 3 of 3 attempts; the
+  next tick marks it `blocked_owner`. PR #99 stays open and blocks new tasks
+  until it is closed. Calls to models in the last 24 h: 19 of 36, all free.
+- The backoff was shortened once by hand (`next_cycle` set to now) at the owner's request.
