@@ -14,5 +14,5 @@ against the authoritative data, so a fast answer is never a wrong one.
 | M3 | Lens survives restart | Lens state stored in the same transaction as data; opening a 1M-row database does not rescan it; a damaged or stale stored Lens is detected and rebuilt | Next |
 | M4 | More than one Lens | Aggregates over numeric values (sum, min, max) and caller-defined grouping, each with an oracle test | |
 | M5 | Honest comparison harness | The same aggregate workload run against plain SQLite (index, triggers) and OpDB on one machine, scripts and raw numbers in the repository | |
-| M6 | Native storage experiments | **Owner decision** on language and on-disk format first | Owner decision |
+| M6 | Native storage experiments (Rust) | Language approved by the owner (issue #74, 2026-11-19); experimental storage v0 in `rust/opdb-core` (TASK-018..021). **Owner decision still needed** on a permanent on-disk format | In progress |
 | M7 | Query surface (SQL or a subset) | **Owner decision** on approach first | Owner decision |
