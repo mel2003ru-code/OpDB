@@ -38,11 +38,8 @@ decision and are not listed.
 | C-01 | M3 | Test: damage the stored Lens (change one value, delete one row) and reopen the database. | New test shows the damage is detected and the Lens is rebuilt equal to Source. |
 | C-02 | M3 | Test: stale stored Lens (write to Source through a second connection, then reopen). | New test shows staleness is detected; answers equal Source recomputation. |
 | C-03 | M3 | Script: time `open()` on a 100k-row database with a stored Lens, 30 repetitions. | `experiments/` script prints median and p95; one-page result file with machine description. |
-| C-04 | M4 | Test: `min` and `max` after deleting the current extreme, with ties, negatives and Unicode keys. | New seeded test (20 or more seeds) equals a plain Python dict model. |
 | C-05 | M4 | Test: caller-defined grouping, with groups appearing and disappearing in one batch. | New test equals a Python `defaultdict` model; empty groups are absent. |
-| C-06 | M4 | Test: `sum` at signed 64-bit limits and on overflow. | New test checks the documented overflow behavior against Python integers. |
 | C-07 | M5 | Script: plain SQLite baseline for `sum`, `min`, `max` with an index, 100k rows. | `experiments/` script with raw timings; no claim about OpDB speed in the same PR. |
 | C-08 | M5 | Script: the same aggregate workload on OpDB, same fixture and machine as C-07. | Raw timings in the same format; needs C-07 merged first. |
-| C-09 | M2 | Test: rollback of a mixed batch (insert, overwrite, delete) leaves Source and Lens unchanged. | New test with injected failure; compared with a copy of the store made before the batch. |
 
 Items are independent unless a row says otherwise (C-08 needs C-07).
