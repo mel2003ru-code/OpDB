@@ -301,4 +301,17 @@ impl Store {
         }
         Ok(())
     }
+
+    /// Writes a new store at `path` holding only this store's live entries,
+    /// once each in key order, leaving this store untouched.
+    pub fn compact_to(&self, path: impl AsRef<Path>) -> Result<()> {
+        let mut entries: Vec<(Vec<u8>, Vec<u8>)> = self.index.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut copy = Store::create(path.as_ref())?;
+        for (key, value) in entries {
+            copy.put(&key, &value)?;
+        }
+        copy.close()?;
+        Ok(())
+    }
 }
