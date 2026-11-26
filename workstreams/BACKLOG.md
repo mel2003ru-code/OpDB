@@ -38,5 +38,5 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-037 M5 benchmark: range scan and filter workloads](TASK-037-m5-bench-range-filter.md) | M5 | WAITING (needs TASK-036) | — |
 | [TASK-038 M5 benchmark: transactions, rollback, crash recovery](TASK-038-m5-bench-transactions.md) | M5 | WAITING (needs TASK-037) | — |
 | [TASK-039 M5 publish the first benchmark table (manual run on VPS1)](TASK-039-m5-publish-first-benchmark.md) | M5 | WAITING (manual; needs TASK-038) | — |
-| [TASK-040 M6 Rust LSM implementation tasks L01..L15 (see docs/LSM_DESIGN.md)](TASK-040-m6-rust-lsm-tasks.md) | M6 | BLOCKED_OWNER | multi-file crate needs sandbox and CI support |
+| [TASK-040 M6 Rust LSM implementation tasks L01..L15 (see docs/LSM_DESIGN.md)](TASK-040-m6-rust-lsm-tasks.md) | M6 | WAITING | modules in rust/opdb-core/src/lsm; sandbox and controller allow them |
 | [TASK-041 M6 stage 2: paged B-tree design](TASK-041-m6-btree-design.md) | M6 | WAITING (needs the first LSM benchmark) | — |

@@ -43,13 +43,12 @@ correctness reference and is not touched.
 `get`: memtable, then the frozen memtable, then SSTables from newest to oldest; the first hit wins, a tombstone ends the
 search with `None`. `scan(prefix)`: a merge iterator over the same sources with newest-wins and tombstone suppression.
 
-## 5. Crate layout and an open prerequisite
-New crate `rust/opdb-lsm/` (standard library only): `src/lib.rs`, `src/ops.rs`, `src/memtable.rs`, `src/wal.rs`,
-`src/sstable.rs`, `src/manifest.rs`, `src/compaction.rs`, `src/db.rs`, tests under `tests/`.
-**Prerequisite that needs the owner:** the controller and its Rust sandbox currently accept only
-`rust/opdb-core/{src/lib.rs, tests/*.rs, examples/*.rs}` with a fixed `Cargo.toml`, and one PR may return at most 600
-lines. A multi-file second crate (and the CI line that runs its tests, a protected `.github/` change) cannot be built by
-the free-model pipeline until that is extended. Until then the tasks below stay `BLOCKED_OWNER`.
+## 5. Crate layout
+No second crate. The LSM lives as modules inside the existing `rust/opdb-core` crate (standard library only, `Cargo.toml`
+unchanged, CI already runs `cargo test` there): `src/lsm/ops.rs`, `memtable.rs`, `wal.rs`, `sstable.rs`, `manifest.rs`,
+`compaction.rs`, `db.rs`, declared from `src/lib.rs`; tests under `tests/`.
+Owner decision of 2026-11-26: the Rust sandbox and the controller accept `src/lsm/<name>.rs` (lowercase name, no deeper
+folders) in addition to `src/lib.rs`, `tests/*.rs`, `examples/*.rs`. One PR may still return at most 600 lines and 8 files.
 
 ## 6. Failure and recovery test plan (green CI is not proof of correctness)
 - Model-based fuzz against `BTreeMap`: random batches, reads, reopen, flush and compaction at random points.
