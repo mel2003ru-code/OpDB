@@ -1,0 +1,150 @@
+//! Research R-RUST-01 (template): differential fuzzing of the experimental Rust store against a HashMap model.
+//!
+//! The controller (or a person) replaces the four `__NAME__` placeholders and runs it as an ordinary integration
+//! test: `cargo test --offline --test research_r_rust_01 -- --nocapture`. It prints ONE JSON line (hypothesis,
+//! engine, result, commit, seed, config, evidence, command, limits) and panics on a mismatch.
+//!
+//! Checked after every operation: `len()` and `get` of every key in a small pool equal the model. Every 50 operations the
+//! store is closed and reopened (no truncated tail expected). Every 200 operations the LAST record is cut at a random
+//! interior offset: the reopened store must report `truncated_tail() == Some(previous length)` and equal the model from
+//! BEFORE that last operation, and `repair()` must make it writable again.
+//! `INJECT_MODEL_FAULT = true` corrupts the model on purpose and must end in FAIL: proof that the harness can fail.
+//! Limits: single process, truncation faults only (no reordered or partially synced writes), small key pool.
+
+use opdb_core::Store;
+use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::path::PathBuf;
+
+const SEED: u64 = __SEED__;
+const OPS: u64 = __OPS__;
+const KEYS: usize = __KEYS__;
+const SHA: &str = "__SHA__";
+const INJECT_MODEL_FAULT: bool = false;
+
+struct Rng(u64);
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545F4914F6CDD1D)
+    }
+    fn below(&mut self, n: u64) -> u64 {
+        self.next() % n
+    }
+    fn bytes(&mut self, max: usize) -> Vec<u8> {
+        let n = self.below(max as u64 + 1) as usize;
+        (0..n).map(|_| self.next() as u8).collect()
+    }
+}
+
+type Model = HashMap<Vec<u8>, Vec<u8>>;
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn compare(store: &Store, model: &Model, pool: &[Vec<u8>]) -> Option<String> {
+    if store.len() != model.len() {
+        return Some(format!("len store={} model={}", store.len(), model.len()));
+    }
+    for key in pool {
+        let got = store.get(key);
+        let want = model.get(key).map(|v| v.as_slice());
+        if got != want {
+            return Some(format!(
+                "key={} store={} model={}",
+                hex(key),
+                got.map(hex).unwrap_or_else(|| "absent".into()),
+                want.map(hex).unwrap_or_else(|| "absent".into())
+            ));
+        }
+    }
+    None
+}
+
+#[test]
+fn research_r_rust_01() {
+    let mut path = PathBuf::from(std::env::temp_dir());
+    path.push(format!("opdb-research-{}-{}.db", std::process::id(), SEED));
+    let _ = fs::remove_file(&path);
+
+    let mut rng = Rng(SEED.wrapping_mul(0x9E3779B97F4A7C15) | 1);
+    let pool: Vec<Vec<u8>> = (0..KEYS).map(|_| rng.bytes(4)).collect();
+    let mut store = Store::create(&path).expect("create");
+    let mut model: Model = HashMap::new();
+    let (mut puts, mut deletes, mut reopens, mut cuts) = (0u64, 0u64, 0u64, 0u64);
+    let mut failure: Option<(u64, String)> = None;
+
+    let mut i = 0u64;
+    while i < OPS && failure.is_none() {
+        i += 1;
+        let len_before = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let model_before = model.clone();
+        let key = pool[rng.below(KEYS as u64) as usize].clone();
+        if rng.below(4) == 0 {
+            store.delete(&key).expect("delete");
+            model.remove(&key);
+            deletes += 1;
+        } else {
+            let value = rng.bytes(32);
+            store.put(&key, &value).expect("put");
+            model.insert(key, value);
+            puts += 1;
+        }
+        if INJECT_MODEL_FAULT && i == OPS / 2 {
+            model.insert(b"__injected__".to_vec(), vec![1]);
+        }
+        if let Some(d) = compare(&store, &model, &pool) {
+            failure = Some((i, d));
+            break;
+        }
+        if i % 200 == 0 {
+            let len_after = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            let rec = len_after - len_before;
+            store.close().expect("close");
+            if rec >= 2 {
+                let cut = 1 + rng.below(rec - 1);
+                let f = OpenOptions::new().write(true).open(&path).expect("open for cut");
+                f.set_len(len_before + cut).expect("set_len");
+                drop(f);
+                let mut s = Store::open(&path).expect("open after cut");
+                cuts += 1;
+                if s.truncated_tail() != Some(len_before) {
+                    failure = Some((i, format!("truncated_tail={:?} expected={:?}", s.truncated_tail(), Some(len_before))));
+                } else if let Some(d) = compare(&s, &model_before, &pool) {
+                    failure = Some((i, format!("after cut: {d}")));
+                } else if s.repair().is_err() {
+                    failure = Some((i, "repair failed".into()));
+                }
+                model = model_before;
+                store = s;
+            } else {
+                store = Store::open(&path).expect("reopen");
+            }
+        } else if i % 50 == 0 {
+            store.close().expect("close");
+            store = Store::open(&path).expect("reopen");
+            reopens += 1;
+            if store.truncated_tail().is_some() {
+                failure = Some((i, "unexpected truncated tail after clean close".into()));
+            } else if let Some(d) = compare(&store, &model, &pool) {
+                failure = Some((i, format!("after reopen: {d}")));
+            }
+        }
+    }
+    let _ = fs::remove_file(&path);
+    let (result, detail, at) = match &failure {
+        None => ("PASS", String::new(), OPS),
+        Some((n, d)) => ("FAIL", d.replace('\\', "/").replace('"', "'"), *n),
+    };
+    println!(
+        "{{\"hypothesis\":\"R-RUST-01\",\"engine\":\"rust\",\"result\":\"{result}\",\"commit\":\"{SHA}\",\"seed\":{SEED},\
+\"config\":{{\"ops\":{OPS},\"keys\":{KEYS},\"inject_model_fault\":{INJECT_MODEL_FAULT}}},\
+\"evidence\":{{\"ops_done\":{at},\"puts\":{puts},\"deletes\":{deletes},\"clean_reopens\":{reopens},\"torn_cuts\":{cuts},\"first_mismatch\":\"{detail}\"}},\
+\"command\":\"cargo test --offline --test research_r_rust_01 -- --nocapture (SEED={SEED}, OPS={OPS}, KEYS={KEYS})\",\
+\"limits\":\"single process; truncation faults only; small key pool; model is a HashMap\"}}"
+    );
+    assert!(failure.is_none(), "R-RUST-01 mismatch at operation {}", at);
+}

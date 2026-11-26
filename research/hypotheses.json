@@ -1,0 +1,17 @@
+[
+  {
+    "id": "R-RUST-01",
+    "engine": "rust",
+    "title": "The Rust store equals a HashMap model under random put/delete, clean reopen and torn-tail cuts",
+    "template": "research/rust/r_rust_01.rs.tmpl",
+    "test_name": "research_r_rust_01",
+    "ops": 20000,
+    "keys": 24
+  },
+  {
+    "id": "R-PY-01",
+    "engine": "python",
+    "title": "The Python numeric Lens equals an independent SQLite/dict oracle on random batches",
+    "status": "NOT_IMPLEMENTED"
+  }
+]
