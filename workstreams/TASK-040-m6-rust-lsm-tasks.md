@@ -11,3 +11,8 @@ and the controller accept these paths; no second crate and no `.github/` change 
 - Do not call the Rust engine working until the benchmark with it has run and its results are published.
 - Green CI is not proof of correctness: every task carries failure and recovery tests (see the design, section 6).
 - The Lens stays as the correctness reference and is not changed.
+
+## Queue (loaded 2026-11-26)
+L01..L12 are TASK-042..TASK-053, L14 is TASK-054, L15 is TASK-055, each a READY row in BACKLOG.md in dependency order (the
+controller takes the first READY row, so a later task never starts before the earlier one is merged or skipped).
+L13 (the R-RUST-03 research template under `research/rust/`) is done by hand: the controller cannot add templates.
