@@ -34,9 +34,23 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-032 M3 rebuild and reopen keep the answers](TASK-032-m3-rebuild-reopen.md) | M3 | READY | — |
 | [TASK-034 M2 an invalid batch is rejected and changes nothing](TASK-034-m2-input-validation.md) | M2 | READY | — |
 | [TASK-035 M5 benchmark core: data, timing, SQLite contender](TASK-035-m5-bench-core.md) | M5 | READY | — |
-| [TASK-036 M5 benchmark: OpDB Source and numeric Lens contenders](TASK-036-m5-bench-opdb-contenders.md) | M5 | WAITING (needs TASK-035) | — |
-| [TASK-037 M5 benchmark: range scan and filter workloads](TASK-037-m5-bench-range-filter.md) | M5 | WAITING (needs TASK-036) | — |
-| [TASK-038 M5 benchmark: transactions, rollback, crash recovery](TASK-038-m5-bench-transactions.md) | M5 | WAITING (needs TASK-037) | — |
+| [TASK-036 M5 benchmark: OpDB Source and numeric Lens contenders](TASK-036-m5-bench-opdb-contenders.md) | M5 | READY | — |
+| [TASK-037 M5 benchmark: range scan and filter workloads](TASK-037-m5-bench-range-filter.md) | M5 | READY | — |
+| [TASK-038 M5 benchmark: transactions, rollback, crash recovery](TASK-038-m5-bench-transactions.md) | M5 | READY | — |
 | [TASK-039 M5 publish the first benchmark table (manual run on VPS1)](TASK-039-m5-publish-first-benchmark.md) | M5 | WAITING (manual; needs TASK-038) | — |
 | [TASK-040 M6 Rust LSM implementation tasks L01..L15 (see docs/LSM_DESIGN.md)](TASK-040-m6-rust-lsm-tasks.md) | M6 | WAITING | modules in rust/opdb-core/src/lsm; sandbox and controller allow them |
 | [TASK-041 M6 stage 2: paged B-tree design](TASK-041-m6-btree-design.md) | M6 | WAITING (needs the first LSM benchmark) | — |
+| [TASK-042 M6 Rust LSM L01: module skeleton and sync policy](workstreams\TASK-042-m6-lsm-l01-skeleton.md) | M6 | READY | — |
+| [TASK-043 M6 Rust LSM L02: memtable](workstreams\TASK-043-m6-lsm-l02-memtable.md) | M6 | READY | — |
+| [TASK-044 M6 Rust LSM L03: WAL writer](workstreams\TASK-044-m6-lsm-l03-wal-writer.md) | M6 | READY | — |
+| [TASK-045 M6 Rust LSM L04: WAL reader, replay and torn-tail repair](workstreams\TASK-045-m6-lsm-l04-wal-reader.md) | M6 | READY | — |
+| [TASK-046 M6 Rust LSM L05: Db over memtable and WAL](workstreams\TASK-046-m6-lsm-l05-db-wal.md) | M6 | READY | — |
+| [TASK-047 M6 Rust LSM L06: SSTable writer](workstreams\TASK-047-m6-lsm-l06-sstable-writer.md) | M6 | READY | — |
+| [TASK-048 M6 Rust LSM L07: SSTable reader and corruption detection](workstreams\TASK-048-m6-lsm-l07-sstable-reader.md) | M6 | READY | — |
+| [TASK-049 M6 Rust LSM L08: flush memtable to SSTable with a manifest](workstreams\TASK-049-m6-lsm-l08-flush.md) | M6 | READY | — |
+| [TASK-050 M6 Rust LSM L09: reads across memtable and several SSTables](workstreams\TASK-050-m6-lsm-l09-read-path.md) | M6 | READY | — |
+| [TASK-051 M6 Rust LSM L10: size-tiered compaction](workstreams\TASK-051-m6-lsm-l10-compaction.md) | M6 | READY | — |
+| [TASK-052 M6 Rust LSM L11: recovery of orphans and half-finished flush or compaction](workstreams\TASK-052-m6-lsm-l11-recovery.md) | M6 | READY | — |
+| [TASK-053 M6 Rust LSM L12: prefix scan over memtable and SSTables](workstreams\TASK-053-m6-lsm-l12-scan.md) | M6 | READY | — |
+| [TASK-054 M6 Rust LSM L14: kill test under EveryBatch](workstreams\TASK-054-m6-lsm-l14-kill-test.md) | M6 | READY | — |
+| [TASK-055 M6 Rust LSM L15: bulk-insert example for the benchmark](workstreams\TASK-055-m6-lsm-l15-bulk-example.md) | M6 | READY | — |
