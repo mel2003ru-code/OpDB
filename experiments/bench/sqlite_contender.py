@@ -24,5 +24,15 @@ class SqliteContender:
     def count(self):
         return self.db.execute("SELECT COUNT(*) FROM kv").fetchone()[0]
 
+    def range_count(self, group):
+        # '0' is the character after '/', so [grp<g>/, grp<g>0) is exactly the group
+        return self.db.execute("SELECT COUNT(*) FROM kv WHERE k >= ? AND k < ?",
+                               ("grp%d/" % group, "grp%d0" % group)).fetchone()[0]
+
+    def filter_count(self, group, threshold=128):
+        return self.db.execute(
+            "SELECT COUNT(*) FROM kv WHERE k >= ? AND k < ? AND substr(v, 1, 1) < ?",
+            ("grp%d/" % group, "grp%d0" % group, bytes([threshold]))).fetchone()[0]
+
     def close(self):
         self.db.close()
