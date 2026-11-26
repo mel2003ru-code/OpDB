@@ -3,12 +3,19 @@ import hashlib
 import random
 
 
-def make_rows(n, seed, value_bytes=16):
-    """Return n (key, value) pairs; key 'grp<i>/<n>' with i = n % 1000, value from a seeded generator."""
+def make_rows(n, seed, value_bytes=16, numeric=False):
+    """Return n (key, value) pairs; key 'grp<i>/<n>' with i = n % 1000, value from a seeded generator.
+
+    numeric=True with value_bytes == 8 gives 8-byte big-endian signed integers within +-2**40, the format of
+    the numeric Lens (values near the 64-bit limits would overflow group sums)."""
     rows = []
     for i in range(n):
         key = "grp%d/%d" % (i % 1000, i)
-        value = random.Random(seed * 1000003 + i).randbytes(value_bytes)
+        rng = random.Random(seed * 1000003 + i)
+        if numeric and value_bytes == 8:
+            value = rng.randint(-2 ** 40, 2 ** 40).to_bytes(8, "big", signed=True)
+        else:
+            value = rng.randbytes(value_bytes)
         rows.append((key, value))
     return rows
 
