@@ -329,6 +329,16 @@ impl Store {
         out
     }
 
+    /// Writes a NEW store at `path` holding only the live entries, in key order.
+    /// Fails (as `Store::create` does) when `path` already exists; this store is not changed.
+    pub fn compact_to(&self, path: impl AsRef<Path>) -> Result<()> {
+        let mut out = Store::create(path)?;
+        for (key, value) in self.entries() {
+            out.put(&key, &value)?;
+        }
+        out.close()
+    }
+
     pub fn close(&mut self) -> Result<()> {
         if let Some(f) = self.file.take() {
             f.sync_all()?;

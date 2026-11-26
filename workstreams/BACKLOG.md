@@ -30,7 +30,7 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-029 M4 caller-defined grouping, groups appearing and disappearing](TASK-029-m4-custom-grouping.md) | M4 | DONE | #122 |
 | [TASK-031 M6 Rust: list all live entries in key order](TASK-031-m6-rust-entries.md) | M6 | DONE | #123 |
 | [TASK-030 M2 order of operations inside one batch](TASK-030-m2-batch-semantics.md) | M2 | DONE | #125 |
-| [TASK-033 M6 Rust: write a compacted copy of a store](TASK-033-m6-rust-compact-to.md) | M6 | READY | — |
+| [TASK-033 M6 Rust: write a compacted copy of a store](TASK-033-m6-rust-compact-to.md) | M6 | DONE | hand-written |
 | [TASK-056 M6 Rust: a key or value longer than u32 is an error, not a silent truncation](TASK-056-m6-rust-length-check.md) | M6 | DONE | hand-written, see PR |
 | [TASK-032 M3 rebuild and reopen keep the answers](TASK-032-m3-rebuild-reopen.md) | M3 | DONE | #135 |
 | [TASK-034 M2 an invalid batch is rejected and changes nothing](TASK-034-m2-input-validation.md) | M2 | READY | — |
