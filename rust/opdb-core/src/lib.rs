@@ -12,6 +12,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod lsm;
+
 pub const MAGIC: &[u8; 8] = b"OPDBRS0\0";
 pub const FORMAT_VERSION: u32 = 0;
 const HEADER_LEN: u64 = 12;

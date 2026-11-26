@@ -41,7 +41,7 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-039 M5 publish the first benchmark table (manual run on VPS1)](TASK-039-m5-publish-first-benchmark.md) | M5 | WAITING (manual; TASK-035..038 are merged, run when VPS1 is quiet) | — |
 | [TASK-040 M6 Rust LSM implementation tasks L01..L15 (see docs/LSM_DESIGN.md)](TASK-040-m6-rust-lsm-tasks.md) | M6 | WAITING | modules in rust/opdb-core/src/lsm; sandbox and controller allow them |
 | [TASK-041 M6 stage 2: paged B-tree design](TASK-041-m6-btree-design.md) | M6 | WAITING (needs the first LSM benchmark) | — |
-| [TASK-042 M6 Rust LSM L01: module skeleton and sync policy](workstreams\TASK-042-m6-lsm-l01-skeleton.md) | M6 | READY | — |
+| [TASK-042 M6 Rust LSM L01: module skeleton and sync policy](workstreams\TASK-042-m6-lsm-l01-skeleton.md) | M6 | DONE | #146 |
 | [TASK-043 M6 Rust LSM L02: memtable](workstreams\TASK-043-m6-lsm-l02-memtable.md) | M6 | READY | — |
 | [TASK-044 M6 Rust LSM L03: WAL writer](workstreams\TASK-044-m6-lsm-l03-wal-writer.md) | M6 | READY | — |
 | [TASK-045 M6 Rust LSM L04: WAL reader, replay and torn-tail repair](workstreams\TASK-045-m6-lsm-l04-wal-reader.md) | M6 | READY | — |
