@@ -35,7 +35,7 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-032 M3 rebuild and reopen keep the answers](TASK-032-m3-rebuild-reopen.md) | M3 | DONE | #135 |
 | [TASK-034 M2 an invalid batch is rejected and changes nothing](TASK-034-m2-input-validation.md) | M2 | DONE | #139 |
 | [TASK-035 M5 benchmark core: data, timing, SQLite contender](TASK-035-m5-bench-core.md) | M5 | DONE | hand-written |
-| [TASK-036 M5 benchmark: OpDB Source and numeric Lens contenders](TASK-036-m5-bench-opdb-contenders.md) | M5 | READY | — |
+| [TASK-036 M5 benchmark: OpDB Source and numeric Lens contenders](TASK-036-m5-bench-opdb-contenders.md) | M5 | DONE | hand-written |
 | [TASK-037 M5 benchmark: range scan and filter workloads](TASK-037-m5-bench-range-filter.md) | M5 | READY | — |
 | [TASK-038 M5 benchmark: transactions, rollback, crash recovery](TASK-038-m5-bench-transactions.md) | M5 | READY | — |
 | [TASK-039 M5 publish the first benchmark table (manual run on VPS1)](TASK-039-m5-publish-first-benchmark.md) | M5 | WAITING (manual; needs TASK-038) | — |
