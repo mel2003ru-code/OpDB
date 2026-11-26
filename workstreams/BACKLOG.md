@@ -21,7 +21,10 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-020 Rust crash/torn-write recovery](TASK-020-rust-crash-recovery.md) | M6 | DONE | #83 |
 | [TASK-021 Measured cost of Rust v0](TASK-021-rust-v0-measurements.md) | M6 | DONE | #87 |
 | [TASK-022 Numeric Lens value-index deletion](TASK-022-m2-value-index-delete.md) | M2 | BLOCKED_OWNER | closed #94 |
-| [TASK-023 M4 min/max after deleting the current extreme](TASK-023-m4-minmax-after-extreme-delete.md) | M4 | READY | — |
-| [TASK-026 M6 Rust: atomic write batches](TASK-026-m6-rust-atomic-batch.md) | M6 | READY | — |
+| [TASK-023 M4 min/max after deleting the current extreme](TASK-023-m4-minmax-after-extreme-delete.md) | M4 | BLOCKED_OWNER | abandoned, see PROGRESS.md |
+| [TASK-026 M6 Rust: atomic write batches](TASK-026-m6-rust-atomic-batch.md) | M6 | BLOCKED_OWNER | abandoned, see PROGRESS.md |
 | [TASK-024 M4 sum at signed 64-bit limits and on overflow](TASK-024-m4-sum-int64-limits.md) | M4 | DONE | #116 |
 | [TASK-025 M2 failed mixed batch leaves Source and Lens unchanged](TASK-025-m2-mixed-batch-rollback.md) | M2 | DONE | #107 |
+| [TASK-027 M3 damaged stored Lens metadata is detected at open and rebuilt](TASK-027-m3-stored-lens-damage.md) | M3 | READY | — |
+| [TASK-028 M6 Rust: encode and decode a write batch](TASK-028-m6-rust-batch-codec.md) | M6 | READY | — |
+| [TASK-029 M4 caller-defined grouping, groups appearing and disappearing](TASK-029-m4-custom-grouping.md) | M4 | READY | — |

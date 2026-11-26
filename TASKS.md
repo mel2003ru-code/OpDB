@@ -35,11 +35,26 @@ decision and are not listed.
 
 | ID | Milestone | Task | Done when |
 | --- | --- | --- | --- |
-| C-01 | M3 | Test: damage the stored Lens (change one value, delete one row) and reopen the database. | New test shows the damage is detected and the Lens is rebuilt equal to Source. |
-| C-02 | M3 | Test: stale stored Lens (write to Source through a second connection, then reopen). | New test shows staleness is detected; answers equal Source recomputation. |
 | C-03 | M3 | Script: time `open()` on a 100k-row database with a stored Lens, 30 repetitions. | `experiments/` script prints median and p95; one-page result file with machine description. |
-| C-05 | M4 | Test: caller-defined grouping, with groups appearing and disappearing in one batch. | New test equals a Python `defaultdict` model; empty groups are absent. |
 | C-07 | M5 | Script: plain SQLite baseline for `sum`, `min`, `max` with an index, 100k rows. | `experiments/` script with raw timings; no claim about OpDB speed in the same PR. |
 | C-08 | M5 | Script: the same aggregate workload on OpDB, same fixture and machine as C-07. | Raw timings in the same format; needs C-07 merged first. |
 
 Items are independent unless a row says otherwise (C-08 needs C-07).
+
+## Removed after checking against the engine (2026-11-26)
+
+- C-01 and C-02 ("a damaged or stale stored Lens is detected and rebuilt") were
+  wrong as written. Metadata and group-table damage IS detected at open (now
+  TASK-027); damage to the value index is not looked at while opening, and a
+  write to `opdb_source_kv` behind OpDB's back while the file is closed is not
+  detected at all: the Lens then answers from stale data. That gap is an engine
+  change, not a test task, and an owner decision.
+- C-05 became TASK-029.
+
+## Next candidates
+
+| ID | Milestone | Task | Done when |
+| --- | --- | --- | --- |
+| R-02 | M6 | Rust: `Store::apply(&[Op])` writing a batch as ONE record of kind 3 with an empty key and `encode_ops` as the value; needs TASK-028 merged. | Tests: model equality, every torn cut of the batch hides it completely, a corrupt batch is `Error::Corrupt`. |
+| R-03 | M6 | Rust: `compact()` rewriting the log with live records only, atomically through a temporary file. | Tests: model equality after compaction, a leftover temporary file is harmless. |
+
