@@ -33,3 +33,10 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-033 M6 Rust: write a compacted copy of a store](TASK-033-m6-rust-compact-to.md) | M6 | READY | — |
 | [TASK-032 M3 rebuild and reopen keep the answers](TASK-032-m3-rebuild-reopen.md) | M3 | READY | — |
 | [TASK-034 M2 an invalid batch is rejected and changes nothing](TASK-034-m2-input-validation.md) | M2 | READY | — |
+| [TASK-035 M5 benchmark core: data, timing, SQLite contender](TASK-035-m5-bench-core.md) | M5 | READY | — |
+| [TASK-036 M5 benchmark: OpDB Source and numeric Lens contenders](TASK-036-m5-bench-opdb-contenders.md) | M5 | WAITING (needs TASK-035) | — |
+| [TASK-037 M5 benchmark: range scan and filter workloads](TASK-037-m5-bench-range-filter.md) | M5 | WAITING (needs TASK-036) | — |
+| [TASK-038 M5 benchmark: transactions, rollback, crash recovery](TASK-038-m5-bench-transactions.md) | M5 | WAITING (needs TASK-037) | — |
+| [TASK-039 M5 publish the first benchmark table (manual run on VPS1)](TASK-039-m5-publish-first-benchmark.md) | M5 | WAITING (manual; needs TASK-038) | — |
+| [TASK-040 M6 Rust LSM implementation tasks L01..L15 (see docs/LSM_DESIGN.md)](TASK-040-m6-rust-lsm-tasks.md) | M6 | BLOCKED_OWNER | multi-file crate needs sandbox and CI support |
+| [TASK-041 M6 stage 2: paged B-tree design](TASK-041-m6-btree-design.md) | M6 | WAITING (needs the first LSM benchmark) | — |
