@@ -9,6 +9,15 @@
     "keys": 24
   },
   {
+    "id": "R-RUST-02",
+    "engine": "rust",
+    "title": "Corrupting any single byte of a store file is never silent",
+    "template": "research/rust/r_rust_02.rs.tmpl",
+    "test_name": "research_r_rust_02",
+    "ops": 150,
+    "keys": 16
+  },
+  {
     "id": "R-PY-01",
     "engine": "python",
     "title": "The Python numeric Lens equals an independent SQLite/dict oracle on random batches",

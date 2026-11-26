@@ -38,3 +38,11 @@ fail, set `INJECT_MODEL_FAULT` to `true` in the rendered file: the run must end 
 Add an entry to `hypotheses.json` (id `R-<AREA>-NN`, `engine`, `template` under `research/rust/`, `test_name`
 `research_...`, `ops` 100..200000, `keys` 1..64) and the template with the placeholders `__SEED__`, `__OPS__`,
 `__KEYS__`, `__SHA__`, each exactly once. Check the template by hand first, including the fault-injection run.
+
+## Hypotheses
+- `R-RUST-01`: the Rust store equals a `HashMap` model under random put/delete, clean reopens and torn-tail cuts of the last record.
+- `R-RUST-02`: corrupting ANY single byte of a store file is never silent. Every byte of a generated file is corrupted in turn;
+  the damaged copy must open as `BadMagic`, `UnsupportedVersion`, `Corrupt` at the exact record offset, or as a truncated tail
+  holding exactly the contents before that record. An `Ok` with other data is a FAIL. First run: 3670 bytes, 12 header errors,
+  2755 `Corrupt`, 903 truncated tails, 0 violations.
+- `R-PY-01`: `NOT_IMPLEMENTED` (Python Lens against an SQLite/dict oracle).
