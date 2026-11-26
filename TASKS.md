@@ -56,5 +56,5 @@ Items are independent unless a row says otherwise (C-08 needs C-07).
 | ID | Milestone | Task | Done when |
 | --- | --- | --- | --- |
 | R-02 | M6 | Rust: `Store::apply(&[Op])` writing a batch as ONE record of kind 3 with an empty key and `encode_ops` as the value; needs TASK-028 merged. | Tests: model equality, every torn cut of the batch hides it completely, a corrupt batch is `Error::Corrupt`. |
-| R-03 | M6 | Rust: `compact()` rewriting the log with live records only, atomically through a temporary file. | Tests: model equality after compaction, a leftover temporary file is harmless. |
 
+R-03 became TASK-033 (as a compacted copy written to a new file).
