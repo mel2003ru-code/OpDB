@@ -5,7 +5,7 @@ Make `Db` durable beyond the WAL: flush the memtable into an SSTable and record 
 Depends on TASK-046 and TASK-048.
 
 ## What to build
-`rust/opdb-core/src/lsm/manifest.rs` (+ `pub mod manifest;`): `MANIFEST` file = magic `OPDBMAN\0`, version u32, entry count u32,
+`rust/opdb-core/src/lsm/manifest.rs`: `MANIFEST` file = magic `OPDBMAN\0`, version u32, entry count u32,
 then per live table: file name length u32 + name, level u32, sequence u64; ends with crc32 over everything before. Functions:
 `write_manifest(dir, &[ManifestEntry]) -> Result<()>` (writes `MANIFEST.tmp`, syncs, renames to `MANIFEST`, syncs the directory
 by opening it and calling `sync_all` when the platform allows, ignoring that error on Windows), and `read_manifest(dir) ->
@@ -28,7 +28,7 @@ no-op; the manifest bit-flip test (every byte) never gives a silently different 
   (`Put(Vec<u8>, Vec<u8>)` / `Delete(Vec<u8>)`), `crate::encode_ops(&[Op]) -> Vec<u8>`,
   `crate::decode_ops(&[u8]) -> Option<Vec<Op>>`, `crate::Error`, `crate::Result`. Error variants: `Io(io::Error)`,
   `Busy`, `BadMagic`, `UnsupportedVersion(u32)`, `Corrupt { offset: u64 }`, `TailNotRepaired`, `Closed`.
-- Return COMPLETE files for every file you change: the new module, `src/lsm/mod.rs` (a few lines) and the test file.
+- `src/lsm/mod.rs` already declares every module (memtable, wal, sstable, manifest, compaction, db) and the `SyncPolicy` enum: DO NOT return or edit `mod.rs` or `lib.rs`; an existing empty stub file for your module already exists: return its COMPLETE new content. Return COMPLETE files for the module file(s) and the test file only.
 - Test helpers: copy the `tmp(name)` path helper from `rust/opdb-core/tests/store_tests.rs`; never import from another
   test file and never edit an existing one. Model: `BTreeMap<Vec<u8>, Option<Vec<u8>>>` or `BTreeMap<Vec<u8>, Vec<u8>>`.
   Use a small deterministic generator (an LCG with a fixed seed) instead of a crate for random data.

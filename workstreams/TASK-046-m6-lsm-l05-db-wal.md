@@ -5,7 +5,7 @@ The first working database: batches go to the WAL then the memtable; reopening r
 Depends on TASK-043 and TASK-045.
 
 ## What to build
-`rust/opdb-core/src/lsm/db.rs` (+ `pub mod db;`):
+`rust/opdb-core/src/lsm/db.rs`:
 - `pub struct Db`; `Db::open(dir: impl AsRef<Path>, policy: SyncPolicy) -> Result<Db>`: creates the directory when it does not
   exist; the WAL is the single file `wal-00000001.log` in it; an existing WAL is replayed into the memtable. A torn tail is
   NOT cut automatically: `torn_tail()` reports it and writes return `Error::TailNotRepaired` until `repair()`.
@@ -30,7 +30,7 @@ file gives `Error::Io`.
   (`Put(Vec<u8>, Vec<u8>)` / `Delete(Vec<u8>)`), `crate::encode_ops(&[Op]) -> Vec<u8>`,
   `crate::decode_ops(&[u8]) -> Option<Vec<Op>>`, `crate::Error`, `crate::Result`. Error variants: `Io(io::Error)`,
   `Busy`, `BadMagic`, `UnsupportedVersion(u32)`, `Corrupt { offset: u64 }`, `TailNotRepaired`, `Closed`.
-- Return COMPLETE files for every file you change: the new module, `src/lsm/mod.rs` (a few lines) and the test file.
+- `src/lsm/mod.rs` already declares every module (memtable, wal, sstable, manifest, compaction, db) and the `SyncPolicy` enum: DO NOT return or edit `mod.rs` or `lib.rs`; an existing empty stub file for your module already exists: return its COMPLETE new content. Return COMPLETE files for the module file(s) and the test file only.
 - Test helpers: copy the `tmp(name)` path helper from `rust/opdb-core/tests/store_tests.rs`; never import from another
   test file and never edit an existing one. Model: `BTreeMap<Vec<u8>, Option<Vec<u8>>>` or `BTreeMap<Vec<u8>, Vec<u8>>`.
   Use a small deterministic generator (an LCG with a fixed seed) instead of a crate for random data.
