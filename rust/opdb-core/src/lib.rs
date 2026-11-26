@@ -287,6 +287,14 @@ impl Store {
         self.index.is_empty()
     }
 
+    /// Returns every live key with its value, sorted by key in byte order.
+    /// Read-only: does not touch the file and does not change the store.
+    pub fn entries(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut out: Vec<(Vec<u8>, Vec<u8>)> = self.index.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
     pub fn close(&mut self) -> Result<()> {
         if let Some(f) = self.file.take() {
             f.sync_all()?;
