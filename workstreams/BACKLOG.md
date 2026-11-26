@@ -27,7 +27,7 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-025 M2 failed mixed batch leaves Source and Lens unchanged](TASK-025-m2-mixed-batch-rollback.md) | M2 | DONE | #107 |
 | [TASK-027 M3 damaged stored Lens metadata is detected at open and rebuilt](TASK-027-m3-stored-lens-damage.md) | M3 | READY | — |
 | [TASK-028 M6 Rust: encode and decode a write batch](TASK-028-m6-rust-batch-codec.md) | M6 | DONE | #121 |
-| [TASK-029 M4 caller-defined grouping, groups appearing and disappearing](TASK-029-m4-custom-grouping.md) | M4 | READY | — |
+| [TASK-029 M4 caller-defined grouping, groups appearing and disappearing](TASK-029-m4-custom-grouping.md) | M4 | IN_PROGRESS | — |
 | [TASK-031 M6 Rust: list all live entries in key order](TASK-031-m6-rust-entries.md) | M6 | READY | — |
 | [TASK-030 M2 order of operations inside one batch](TASK-030-m2-batch-semantics.md) | M2 | READY | — |
 | [TASK-033 M6 Rust: write a compacted copy of a store](TASK-033-m6-rust-compact-to.md) | M6 | READY | — |
