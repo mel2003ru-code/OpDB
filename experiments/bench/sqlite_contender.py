@@ -17,6 +17,20 @@ class SqliteContender:
             self.db.executemany("INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)", rows[start:start + batch])
             self.db.execute("COMMIT")
 
+    crash_supported = True
+
+    def begin(self):
+        self.db.execute("BEGIN")
+
+    def insert(self, rows):
+        self.db.executemany("INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)", rows)
+
+    def commit(self):
+        self.db.execute("COMMIT")
+
+    def rollback(self):
+        self.db.execute("ROLLBACK")
+
     def get(self, key):
         row = self.db.execute("SELECT v FROM kv WHERE k = ?", (key,)).fetchone()
         return None if row is None else bytes(row[0])

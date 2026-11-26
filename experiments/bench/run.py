@@ -7,7 +7,7 @@ import sys
 import tempfile
 import time
 
-from experiments.bench import data, timing, workloads
+from experiments.bench import data, timing, transactions, workloads
 from experiments.bench.opdb_contenders import OpdbNumericContender, OpdbSourceContender
 from experiments.bench.sqlite_contender import SqliteContender
 
@@ -17,7 +17,8 @@ REGISTRY = {
     "opdb_source": OpdbSourceContender,
     "opdb_numeric_lens": OpdbNumericContender,
 }
-ALL_WORKLOADS = ("bulk_insert", "point_read", "range_scan", "filter")
+TXN = ("txn_commit", "txn_rollback", "txn_crash")
+ALL_WORKLOADS = ("bulk_insert", "point_read", "range_scan", "filter") + TXN
 NEEDS = {"range_scan": "range_count", "filter": "filter_count"}
 
 
@@ -63,6 +64,55 @@ def _one_run(cls, rows, seed, synchronous, wanted, groups):
         finally:
             contender.close()
     return out
+
+
+def _txn_workloads(cls, name, size, rows, seed, sync, wanted, runs, report):
+    """txn_commit is timed; txn_rollback and txn_crash are PASS/FAIL verdicts. A FAIL aborts the run."""
+    if size < 300:
+        raise SystemExit("txn workloads need --sizes of at least 300")
+    if "txn_commit" in wanted:
+        samples = []
+        for _ in range(runs):
+            with tempfile.TemporaryDirectory() as tmp:
+                c = _make(cls, os.path.join(tmp, "bench.db"), sync)
+                try:
+                    commits = []
+                    samples.append(timing.measure(lambda: commits.append(transactions.commit_many(c, rows)), 1)[0])
+                    _verify(c, rows, seed)
+                finally:
+                    c.close()
+        row = {"contender": name, "size": size, "workload": "txn_commit", "verified": True,
+               "commits": -(-size // 100)}
+        row.update(timing.summarize(samples))
+        report["results"].append(row)
+        print("%-18s %8d %-12s median %9.2f ms  min %9.2f  max %9.2f" % (
+            name, size, "txn_commit", row["median_ms"], row["min_ms"], row["max_ms"]))
+    verdicts = []
+    if "txn_rollback" in wanted:
+        with tempfile.TemporaryDirectory() as tmp:
+            c = _make(cls, os.path.join(tmp, "bench.db"), sync)
+            try:
+                leaked = transactions.rollback_check(c, rows)
+                kept = all(c.get(k) == v for k, v in rows[:200])
+                ok = not leaked and kept and c.count() == 200
+            finally:
+                c.close()
+        verdicts.append(("txn_rollback", "PASS" if ok else "FAIL"))
+    if "txn_crash" in wanted:
+        if getattr(cls, "crash_supported", False):
+            with tempfile.TemporaryDirectory() as tmp:
+                keys, integrity = transactions.crash_check(os.path.join(tmp, "crash.db"), rows)
+            ok = keys == {k for k, _ in rows[:200]} and integrity == "ok"
+            verdicts.append(("txn_crash", "PASS" if ok else "FAIL"))
+        else:
+            report["results"].append({"contender": name, "size": size, "workload": "txn_crash",
+                                      "status": "NOT_IMPLEMENTED"})
+            print("%-18s %8d %-12s NOT_IMPLEMENTED" % (name, size, "txn_crash"))
+    for workload, verdict in verdicts:
+        report["results"].append({"contender": name, "size": size, "workload": workload, "status": verdict})
+        print("%-18s %8d %-12s %s" % (name, size, workload, verdict))
+        if verdict == "FAIL":
+            raise SystemExit("%s: %s failed" % (name, workload))
 
 
 def main(argv=None):
@@ -115,6 +165,8 @@ def main(argv=None):
                 continue
             runnable = []
             for w in wanted:
+                if w in TXN:
+                    continue
                 if w in NEEDS and not hasattr(cls, NEEDS[w]):
                     report["results"].append({"contender": name, "size": size, "workload": w,
                                               "status": "NOT_IMPLEMENTED"})
@@ -123,7 +175,7 @@ def main(argv=None):
                     runnable.append(w)
             samples = {w: [] for w in ("bulk_insert", "point_read", "range_scan", "filter")}
             run_wanted = set(runnable)
-            for _ in range(args.runs):
+            for _ in range(args.runs if runnable else 0):
                 for w, ms in _one_run(cls, rows, args.seed, sync, run_wanted, groups).items():
                     samples[w].append(ms)
             for w in runnable:
@@ -132,6 +184,8 @@ def main(argv=None):
                 report["results"].append(row)
                 print("%-18s %8d %-12s median %9.2f ms  min %9.2f  max %9.2f" % (
                     name, size, w, row["median_ms"], row["min_ms"], row["max_ms"]))
+            if any(w in TXN for w in wanted):
+                _txn_workloads(cls, name, size, rows, args.seed, sync, set(wanted), args.runs, report)
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2)

@@ -26,6 +26,14 @@ class OpdbSourceContender:
     def get(self, key):
         return self.store.get(key)
 
+    def rollback_batch(self, rows):
+        """Apply a batch that ends in an invalid operation; the whole batch must be rejected."""
+        try:
+            self.store.apply([("put", k, v) for k, v in rows] + [("bogus", "x", b"")])
+        except ValueError:
+            return
+        raise AssertionError("%s accepted a batch with an invalid operation" % self.name)
+
     def range_count(self, group):
         # a group holds at most 1000 rows up to a million rows
         return len(self.store.scan("grp%d/" % group, limit=1000))
