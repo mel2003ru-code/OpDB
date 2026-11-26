@@ -26,6 +26,12 @@ class OpdbSourceContender:
     def get(self, key):
         return self.store.get(key)
 
+    def range_count(self, group):
+        # a group holds at most 1000 rows up to a million rows
+        return len(self.store.scan("grp%d/" % group, limit=1000))
+
+    # filter_count does not exist: the benchmark reports NOT_IMPLEMENTED
+
     def count(self):
         db = sqlite3.connect(self.path)
         try:
