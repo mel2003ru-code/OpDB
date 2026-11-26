@@ -5,7 +5,7 @@ Write an immutable sorted file with an index and a footer. Pure function of its 
 a minimal test-side parser.
 
 ## What to build
-`rust/opdb-core/src/lsm/sstable.rs` (+ `pub mod sstable;`). Layout (LE): data blocks, each holding entries until it reaches
+`rust/opdb-core/src/lsm/sstable.rs`. Layout (LE): data blocks, each holding entries until it reaches
 about 4096 bytes; entry = flag u8 (1 value, 0 tombstone), key length u32, value length u32, key, value; after the data blocks
 an index block: count u32 then per block (first key length u32, first key, block offset u64, block length u32); then a footer
 of exactly 36 bytes: magic 8 bytes `OPDBSST\0`, version u32 (0), index offset u64, index length u32, entry count u64, then a crc32 u32
@@ -28,7 +28,7 @@ no file; an entry larger than a block still works (a block may exceed 4096 for a
   (`Put(Vec<u8>, Vec<u8>)` / `Delete(Vec<u8>)`), `crate::encode_ops(&[Op]) -> Vec<u8>`,
   `crate::decode_ops(&[u8]) -> Option<Vec<Op>>`, `crate::Error`, `crate::Result`. Error variants: `Io(io::Error)`,
   `Busy`, `BadMagic`, `UnsupportedVersion(u32)`, `Corrupt { offset: u64 }`, `TailNotRepaired`, `Closed`.
-- Return COMPLETE files for every file you change: the new module, `src/lsm/mod.rs` (a few lines) and the test file.
+- `src/lsm/mod.rs` already declares every module (memtable, wal, sstable, manifest, compaction, db) and the `SyncPolicy` enum: DO NOT return or edit `mod.rs` or `lib.rs`; an existing empty stub file for your module already exists: return its COMPLETE new content. Return COMPLETE files for the module file(s) and the test file only.
 - Test helpers: copy the `tmp(name)` path helper from `rust/opdb-core/tests/store_tests.rs`; never import from another
   test file and never edit an existing one. Model: `BTreeMap<Vec<u8>, Option<Vec<u8>>>` or `BTreeMap<Vec<u8>, Vec<u8>>`.
   Use a small deterministic generator (an LCG with a fixed seed) instead of a crate for random data.

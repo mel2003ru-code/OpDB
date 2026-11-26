@@ -4,7 +4,7 @@
 Append one write batch as one checksummed record to a WAL file, with a sync policy.
 
 ## What to build
-`rust/opdb-core/src/lsm/wal.rs` (+ `pub mod wal;` in `mod.rs`). File layout (all integers little-endian):
+`rust/opdb-core/src/lsm/wal.rs`. File layout (all integers little-endian):
 header = 8 bytes magic `OPDBWAL\0` + u32 version 0 (12 bytes). Record = kind u8 (=3), key length u32 (=0),
 value length u32 (=N), value = `encode_ops(ops)`, crc32 u32 over everything before it in the record.
 - `pub const WAL_MAGIC: &[u8; 8]`, `pub const WAL_HEADER_LEN: u64 = 12`.
@@ -30,7 +30,7 @@ kind, lengths and value; `create` on an existing path fails and leaves the file 
   (`Put(Vec<u8>, Vec<u8>)` / `Delete(Vec<u8>)`), `crate::encode_ops(&[Op]) -> Vec<u8>`,
   `crate::decode_ops(&[u8]) -> Option<Vec<Op>>`, `crate::Error`, `crate::Result`. Error variants: `Io(io::Error)`,
   `Busy`, `BadMagic`, `UnsupportedVersion(u32)`, `Corrupt { offset: u64 }`, `TailNotRepaired`, `Closed`.
-- Return COMPLETE files for every file you change: the new module, `src/lsm/mod.rs` (a few lines) and the test file.
+- `src/lsm/mod.rs` already declares every module (memtable, wal, sstable, manifest, compaction, db) and the `SyncPolicy` enum: DO NOT return or edit `mod.rs` or `lib.rs`; an existing empty stub file for your module already exists: return its COMPLETE new content. Return COMPLETE files for the module file(s) and the test file only.
 - Test helpers: copy the `tmp(name)` path helper from `rust/opdb-core/tests/store_tests.rs`; never import from another
   test file and never edit an existing one. Model: `BTreeMap<Vec<u8>, Option<Vec<u8>>>` or `BTreeMap<Vec<u8>, Vec<u8>>`.
   Use a small deterministic generator (an LCG with a fixed seed) instead of a crate for random data.
