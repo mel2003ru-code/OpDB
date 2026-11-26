@@ -19,6 +19,73 @@ const OP_PUT: u8 = 1;
 const OP_DELETE: u8 = 2;
 static CREATE_NONCE: AtomicU64 = AtomicU64::new(0);
 
+/// A single operation in an experimental write batch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Op {
+    Put(Vec<u8>, Vec<u8>),
+    Delete(Vec<u8>),
+}
+
+/// Encodes a batch of operations into bytes without any file access.
+///
+/// Each entry is: kind u8, key length u32 LE, value length u32 LE, key,
+/// value. There is no count and no checksum.
+pub fn encode_ops(ops: &[Op]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for op in ops {
+        match op {
+            Op::Put(key, value) => {
+                out.push(OP_PUT);
+                out.extend_from_slice(&(key.len() as u32).to_le_bytes());
+                out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+                out.extend_from_slice(key);
+                out.extend_from_slice(value);
+            }
+            Op::Delete(key) => {
+                out.push(OP_DELETE);
+                out.extend_from_slice(&(key.len() as u32).to_le_bytes());
+                out.extend_from_slice(&0u32.to_le_bytes());
+                out.extend_from_slice(key);
+            }
+        }
+    }
+    out
+}
+
+/// Decodes bytes produced by `encode_ops` back into operations.
+///
+/// Returns `None` when an entry is cut short, the kind is neither 1 nor 2,
+/// or a delete carries a non-empty value. Never panics.
+pub fn decode_ops(bytes: &[u8]) -> Option<Vec<Op>> {
+    let mut pos = 0;
+    let mut ops = Vec::new();
+    while pos < bytes.len() {
+        let kind = *bytes.get(pos)?;
+        pos = pos.checked_add(1)?;
+        let klen = u32::from_le_bytes(bytes.get(pos..pos.checked_add(4)?)?.try_into().ok()?) as usize;
+        pos = pos.checked_add(4)?;
+        let vlen = u32::from_le_bytes(bytes.get(pos..pos.checked_add(4)?)?.try_into().ok()?) as usize;
+        pos = pos.checked_add(4)?;
+        let key_end = pos.checked_add(klen)?;
+        let key = bytes.get(pos..key_end)?.to_vec();
+        pos = key_end;
+        let value_end = pos.checked_add(vlen)?;
+        let value = bytes.get(pos..value_end)?.to_vec();
+        pos = value_end;
+        match kind {
+            OP_PUT => ops.push(Op::Put(key, value)),
+            OP_DELETE => {
+                if !value.is_empty() {
+                    return None;
+                }
+                ops.push(Op::Delete(key));
+            }
+            _ => return None,
+        }
+    }
+    Some(ops)
+}
+
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
