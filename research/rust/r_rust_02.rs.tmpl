@@ -1,0 +1,144 @@
+//! Research R-RUST-02 (template): corrupting ANY single byte of a store file is never silent.
+//!
+//! The controller (or a person) replaces the four `__NAME__` placeholders and runs it as an ordinary integration test:
+//! `cargo test --offline --test research_r_rust_02 -- --nocapture`. It prints ONE JSON line and panics on a violation.
+//!
+//! A store with `OPS` random put/delete records is written, then EVERY byte of the file is corrupted in turn (xor with a
+//! random non-zero mask), the damaged copy is opened, and the outcome must be exactly one of:
+//!   * header bytes 0..8   -> `Err(BadMagic)`;  header bytes 8..12 -> `Err(UnsupportedVersion(_))`;
+//!   * a byte inside record r -> `Err(Corrupt { offset == start of record r })`, OR `Ok` with
+//!     `truncated_tail() == Some(start of record r)` whose contents equal the model from BEFORE record r
+//!     (a damaged length field can turn a record into an incomplete tail).
+//! Anything else (an `Ok` with different data, a wrong offset, a panic) is a FAIL: silent corruption.
+//! `INJECT_MODEL_FAULT = true` skips the corruption of one byte and must end in FAIL (proof the harness can fail).
+//! Limits: single-byte corruption only (CRC-32 detects every such error unless a length field changes together with
+//! a CRC collision, probability about 2^-32 per byte); no multi-byte or sector-level damage; small key pool.
+
+use opdb_core::{Error, Store};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+
+const SEED: u64 = __SEED__;
+const OPS: u64 = __OPS__;
+const KEYS: usize = __KEYS__;
+const SHA: &str = "__SHA__";
+const INJECT_MODEL_FAULT: bool = false;
+
+struct Rng(u64);
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545F4914F6CDD1D)
+    }
+    fn below(&mut self, n: u64) -> u64 {
+        self.next() % n
+    }
+    fn bytes(&mut self, max: usize) -> Vec<u8> {
+        let n = self.below(max as u64 + 1) as usize;
+        (0..n).map(|_| self.next() as u8).collect()
+    }
+}
+
+type Model = HashMap<Vec<u8>, Vec<u8>>;
+
+fn same(store: &Store, model: &Model, pool: &[Vec<u8>]) -> bool {
+    store.len() == model.len() && pool.iter().all(|k| store.get(k) == model.get(k).map(|v| v.as_slice()))
+}
+
+#[test]
+fn research_r_rust_02() {
+    let mut dir = PathBuf::from(std::env::temp_dir());
+    dir.push(format!("opdb-research2-{}-{}", std::process::id(), SEED));
+    let good = dir.with_extension("good");
+    let bad = dir.with_extension("bad");
+    let _ = fs::remove_file(&good);
+    let _ = fs::remove_file(&bad);
+
+    let mut rng = Rng(SEED.wrapping_mul(0x9E3779B97F4A7C15) | 1);
+    let pool: Vec<Vec<u8>> = (0..KEYS).map(|_| rng.bytes(4)).collect();
+    let mut store = Store::create(&good).expect("create");
+    let mut model: Model = HashMap::new();
+    let mut starts: Vec<u64> = Vec::new(); // start offset of every record
+    let mut states: Vec<Model> = vec![model.clone()]; // contents before record i is states[i]
+    for _ in 0..OPS {
+        starts.push(fs::metadata(&good).unwrap().len());
+        let key = pool[rng.below(KEYS as u64) as usize].clone();
+        if rng.below(4) == 0 {
+            store.delete(&key).expect("delete");
+            model.remove(&key);
+        } else {
+            let value = rng.bytes(24);
+            store.put(&key, &value).expect("put");
+            model.insert(key, value);
+        }
+        states.push(model.clone());
+    }
+    store.close().expect("close");
+    let original = fs::read(&good).expect("read");
+    let total = original.len();
+    let (mut header_errors, mut corrupt_errors, mut tails, mut checked) = (0u64, 0u64, 0u64, 0u64);
+    let mut failure: Option<(usize, String)> = None;
+
+    for pos in 0..total {
+        let mut data = original.clone();
+        let mask = 1 + rng.below(255) as u8;
+        let skip = INJECT_MODEL_FAULT && pos == total / 2;
+        if !skip {
+            data[pos] ^= mask;
+        }
+        fs::write(&bad, &data).expect("write copy");
+        let record = if pos < 12 { None } else { Some(starts.partition_point(|&s| s as usize <= pos) - 1) };
+        checked += 1;
+        let verdict: Result<(), String> = match (Store::open(&bad), record) {
+            (Err(Error::BadMagic), None) if pos < 8 => {
+                header_errors += 1;
+                Ok(())
+            }
+            (Err(Error::UnsupportedVersion(_)), None) if pos >= 8 => {
+                header_errors += 1;
+                Ok(())
+            }
+            (Err(Error::Corrupt { offset }), Some(r)) if offset == starts[r] => {
+                corrupt_errors += 1;
+                Ok(())
+            }
+            (Ok(mut s), Some(r)) => {
+                let tail = s.truncated_tail();
+                let ok = tail == Some(starts[r]) && same(&s, &states[r], &pool);
+                let _ = s.close();
+                if ok {
+                    tails += 1;
+                    Ok(())
+                } else {
+                    Err(format!("byte {pos} in record {r}: opened, truncated_tail={tail:?}, expected Some({}) and the contents before the record", starts[r]))
+                }
+            }
+            (Ok(mut s), None) => {
+                let _ = s.close();
+                Err(format!("byte {pos} in the header: store opened"))
+            }
+            (Err(e), r) => Err(format!("byte {pos} record {r:?}: unexpected error {e:?}")),
+        };
+        if let Err(d) = verdict {
+            failure = Some((pos, d));
+            break;
+        }
+    }
+    let _ = fs::remove_file(&good);
+    let _ = fs::remove_file(&bad);
+    let (result, detail, at) = match &failure {
+        None => ("PASS", String::new(), total),
+        Some((p, d)) => ("FAIL", d.replace('\\', "/").replace('"', "'"), *p),
+    };
+    println!(
+        "{{\"hypothesis\":\"R-RUST-02\",\"engine\":\"rust\",\"result\":\"{result}\",\"commit\":\"{SHA}\",\"seed\":{SEED},\
+\"config\":{{\"ops\":{OPS},\"keys\":{KEYS},\"inject_model_fault\":{INJECT_MODEL_FAULT}}},\
+\"evidence\":{{\"ops_done\":{at},\"bytes_checked\":{checked},\"header_errors\":{header_errors},\"corrupt_errors\":{corrupt_errors},\"truncated_tails\":{tails},\"first_mismatch\":\"{detail}\"}},\
+\"command\":\"cargo test --offline --test research_r_rust_02 -- --nocapture (SEED={SEED}, OPS={OPS}, KEYS={KEYS})\",\
+\"limits\":\"single-byte corruption only; no multi-byte or sector damage; small key pool; CRC-32 collision with a changed length is possible in theory\"}}"
+    );
+    assert!(failure.is_none(), "R-RUST-02 violation at byte {}", at);
+}
