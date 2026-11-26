@@ -19,6 +19,9 @@ const OP_PUT: u8 = 1;
 const OP_DELETE: u8 = 2;
 static CREATE_NONCE: AtomicU64 = AtomicU64::new(0);
 
+/// Largest key or value the record format can describe (lengths are u32).
+pub const MAX_FIELD_LEN: usize = u32::MAX as usize;
+
 /// A single operation in an experimental write batch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
@@ -30,6 +33,9 @@ pub enum Op {
 ///
 /// Each entry is: kind u8, key length u32 LE, value length u32 LE, key,
 /// value. There is no count and no checksum.
+///
+/// Lengths above `u32::MAX` are truncated here; use `try_encode_ops` for the
+/// checked variant.
 pub fn encode_ops(ops: &[Op]) -> Vec<u8> {
     let mut out = Vec::new();
     for op in ops {
@@ -50,6 +56,30 @@ pub fn encode_ops(ops: &[Op]) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Checked variant of `encode_ops`: fails with `Error::TooLarge` before encoding
+/// when any key or value is longer than `MAX_FIELD_LEN`.
+pub fn try_encode_ops(ops: &[Op]) -> Result<Vec<u8>> {
+    for op in ops {
+        match op {
+            Op::Put(key, value) => {
+                check_field_len(key.len())?;
+                check_field_len(value.len())?;
+            }
+            Op::Delete(key) => check_field_len(key.len())?,
+        }
+    }
+    Ok(encode_ops(ops))
+}
+
+/// Ok when `len` fits the u32 length field of the record format.
+pub fn check_field_len(len: usize) -> Result<()> {
+    if len > MAX_FIELD_LEN {
+        Err(Error::TooLarge { len })
+    } else {
+        Ok(())
+    }
 }
 
 /// Decodes bytes produced by `encode_ops` back into operations.
@@ -98,6 +128,8 @@ pub enum Error {
     /// The log has an unreplayed damaged tail; call `repair` before writing.
     TailNotRepaired,
     Closed,
+    /// A key or value is longer than `MAX_FIELD_LEN`; nothing was written.
+    TooLarge { len: usize },
 }
 
 impl From<io::Error> for Error {
@@ -249,6 +281,8 @@ impl Store {
         if self.truncated_tail_at.is_some() {
             return Err(Error::TailNotRepaired);
         }
+        check_field_len(key.len())?;
+        check_field_len(value.len())?;
         let mut rec = Vec::with_capacity(13 + key.len() + value.len());
         rec.push(op);
         rec.extend_from_slice(&(key.len() as u32).to_le_bytes());
