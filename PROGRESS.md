@@ -135,3 +135,9 @@ and restoring that `agent.py` plus a restart of `opdb-executor` reverts it.
 - **Controller state:** limit 200 model calls a day, reviewer prompt gets the sandbox evidence, the author sees its previous files on a retry, queue guard auto-rebases and closes exhausted PRs, the Rust sandbox is repaired.
 
 - **Second batch queued (2026-11-26):** TASK-031 (Rust `entries()`), TASK-030 (Lens batch order), TASK-033 (Rust `compact_to`), TASK-032 (Lens rebuild/reopen), TASK-034 (Lens invalid batches). Premises checked on the real engine; both Rust specs were validated with reference implementations under `cargo test` (3 and 6 tests green). The queue alternates Rust and Lens.
+
+## Owner decisions of 2026-11-26: SQLite is the competitor, LSM first (queued, nothing built yet)
+
+- **Goal:** beat SQLite measurably on writes (bulk inserts) at equal durability, and be on par on reads. The reference point is SQLite itself: the earlier measurements (`docs/M5_COMPARISON.md`, `docs/RUST_STORAGE_V0.md`; neither SHA quoted there exists in the history, both arrived with merge `320cbba`) show the Lens slower than plain SQLite on writes (1.2x to 2.7x) and the Rust v0 numbers compare an unsynced `put` with SQLite `synchronous=FULL`. The Lens stays as the correctness reference.
+- **Queue:** TASK-035 (benchmark core and SQLite contender, READY), then TASK-036 (OpDB contenders), TASK-037 (range and filter), TASK-038 (transactions, rollback, crash), TASK-039 (manual run on VPS1, publish `docs/benchmarks/`). Their premises were checked on the real code. The LSM design is `docs/LSM_DESIGN.md` (15 small tasks); TASK-040 (the LSM code) is BLOCKED_OWNER because the controller sandbox accepts only `rust/opdb-core/src/lib.rs` and tests. TASK-041 (B-tree design) waits for the first LSM benchmark.
+- **Where:** benchmarks run on VPS1 (a shared production server) throttled and are published as indicative; rules in `docs/benchmarks/README.md`.
