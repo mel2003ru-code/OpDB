@@ -48,7 +48,7 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-046 M6 Rust LSM L05: Db over memtable and WAL](workstreams\TASK-046-m6-lsm-l05-db-wal.md) | M6 | DONE | hand-written |
 | [TASK-047 M6 Rust LSM L06: SSTable writer](workstreams\TASK-047-m6-lsm-l06-sstable-writer.md) | M6 | READY | — |
 | [TASK-048 M6 Rust LSM L07: SSTable reader and corruption detection](workstreams\TASK-048-m6-lsm-l07-sstable-reader.md) | M6 | READY | — |
-| [TASK-049 M6 Rust LSM L08: flush memtable to SSTable with a manifest](workstreams\TASK-049-m6-lsm-l08-flush.md) | M6 | READY | — |
+| [TASK-049 M6 Rust LSM L08: flush memtable to SSTable with a manifest](workstreams\TASK-049-m6-lsm-l08-flush.md) | M6 | IN_PROGRESS | — |
 | [TASK-050 M6 Rust LSM L09: reads across memtable and several SSTables](workstreams\TASK-050-m6-lsm-l09-read-path.md) | M6 | READY | — |
 | [TASK-051 M6 Rust LSM L10: size-tiered compaction](workstreams\TASK-051-m6-lsm-l10-compaction.md) | M6 | READY | — |
 | [TASK-052 M6 Rust LSM L11: recovery of orphans and half-finished flush or compaction](workstreams\TASK-052-m6-lsm-l11-recovery.md) | M6 | READY | — |
