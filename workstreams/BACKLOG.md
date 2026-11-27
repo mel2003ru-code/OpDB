@@ -43,8 +43,8 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-041 M6 stage 2: paged B-tree design](TASK-041-m6-btree-design.md) | M6 | WAITING (needs the first LSM benchmark) | — |
 | [TASK-042 M6 Rust LSM L01: module skeleton and sync policy](workstreams\TASK-042-m6-lsm-l01-skeleton.md) | M6 | DONE | #146 |
 | [TASK-043 M6 Rust LSM L02: memtable](workstreams\TASK-043-m6-lsm-l02-memtable.md) | M6 | DONE | hand-written |
-| [TASK-044 M6 Rust LSM L03: WAL writer](workstreams\TASK-044-m6-lsm-l03-wal-writer.md) | M6 | WAITING (hand-written by the assistant) | — |
-| [TASK-045 M6 Rust LSM L04: WAL reader, replay and torn-tail repair](workstreams\TASK-045-m6-lsm-l04-wal-reader.md) | M6 | WAITING (hand-written by the assistant) | — |
+| [TASK-044 M6 Rust LSM L03: WAL writer](workstreams\TASK-044-m6-lsm-l03-wal-writer.md) | M6 | DONE | hand-written |
+| [TASK-045 M6 Rust LSM L04: WAL reader, replay and torn-tail repair](workstreams\TASK-045-m6-lsm-l04-wal-reader.md) | M6 | DONE | hand-written |
 | [TASK-046 M6 Rust LSM L05: Db over memtable and WAL](workstreams\TASK-046-m6-lsm-l05-db-wal.md) | M6 | WAITING (hand-written by the assistant) | — |
 | [TASK-047 M6 Rust LSM L06: SSTable writer](workstreams\TASK-047-m6-lsm-l06-sstable-writer.md) | M6 | READY | — |
 | [TASK-048 M6 Rust LSM L07: SSTable reader and corruption detection](workstreams\TASK-048-m6-lsm-l07-sstable-reader.md) | M6 | READY | — |
