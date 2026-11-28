@@ -51,7 +51,7 @@ Agents take the first `READY` row. Statuses: `READY`, `IN_PROGRESS`,
 | [TASK-049 M6 Rust LSM L08: flush memtable to SSTable with a manifest](workstreams\TASK-049-m6-lsm-l08-flush.md) | M6 | READY | — |
 | [TASK-050 M6 Rust LSM L09: reads across memtable and several SSTables](workstreams\TASK-050-m6-lsm-l09-read-path.md) | M6 | READY | — |
 | [TASK-051 M6 Rust LSM L10: size-tiered compaction](workstreams\TASK-051-m6-lsm-l10-compaction.md) | M6 | READY | — |
-| [TASK-052 M6 Rust LSM L11: recovery of orphans and half-finished flush or compaction](workstreams\TASK-052-m6-lsm-l11-recovery.md) | M6 | READY | — |
+| [TASK-052 M6 Rust LSM L11: recovery of orphans and half-finished flush or compaction](workstreams\TASK-052-m6-lsm-l11-recovery.md) | M6 | IN_PROGRESS | — |
 | [TASK-053 M6 Rust LSM L12: prefix scan over memtable and SSTables](workstreams\TASK-053-m6-lsm-l12-scan.md) | M6 | READY | — |
 | [TASK-054 M6 Rust LSM L14: kill test under EveryBatch](workstreams\TASK-054-m6-lsm-l14-kill-test.md) | M6 | READY | — |
 | [TASK-055 M6 Rust LSM L15: bulk-insert example for the benchmark](workstreams\TASK-055-m6-lsm-l15-bulk-example.md) | M6 | READY | — |
